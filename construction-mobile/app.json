@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "construction-mobile",
+    "slug": "construction-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Take photos of materials on site.",
+        "NSMicrophoneUsageDescription": "Record voice requests for materials.",
+        "NSPhotoLibraryUsageDescription": "Choose photos of materials on site."
+      }
+    },
+    "android": {
+      "permissions": ["CAMERA", "RECORD_AUDIO"],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Take photos of materials on site.",
+          "photosPermission": "Choose photos of materials on site.",
+          "microphonePermission": "Record voice requests for materials."
+        }
+      ]
+    ]
+  }
+}

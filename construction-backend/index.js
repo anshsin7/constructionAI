@@ -2,7 +2,7 @@ import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
-import OpenAI from 'openai'
+import OpenAI, { toFile } from 'openai'
 
 dotenv.config()
 
@@ -10,8 +10,87 @@ const app = express()
 app.use(cors())
 app.use(express.json({ limit: '10mb' })) // large enough for base64 images
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+const supabaseKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
+const supabase = createClient(process.env.SUPABASE_URL, supabaseKey)
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+
+function parseAiJson(raw) {
+  const trimmed = raw.trim().replace(/^```json?\s*/i, '').replace(/\s*```$/, '')
+  return JSON.parse(trimmed)
+}
+
+async function enrichOrders(orders) {
+  if (!orders?.length) return []
+
+  const productIds = [...new Set(orders.map((o) => o.product_id).filter(Boolean))]
+  const { data: products, error } = await supabase
+    .from('products')
+    .select('id, name, unit_price, category, unit')
+    .in('id', productIds)
+
+  if (error) throw error
+
+  const byId = Object.fromEntries((products ?? []).map((p) => [p.id, p]))
+  return orders.map((o) => ({
+    ...o,
+    products: byId[o.product_id]
+      ? {
+          name: byId[o.product_id].name,
+          unit_price: byId[o.product_id].unit_price,
+          category: byId[o.product_id].category,
+          unit: byId[o.product_id].unit
+        }
+      : null
+  }))
+}
+
+async function fetchPendingForApprover(approverId) {
+  const { data: workers, error: workersError } = await supabase
+    .from('users')
+    .select('id')
+    .eq('manager_id', approverId)
+
+  if (workersError) throw workersError
+
+  const workerIds = workers?.map((w) => w.id) ?? []
+  const byId = new Map()
+
+  const { data: byApprover, error: aErr } = await supabase
+    .from('orders')
+    .select('*')
+    .eq('status', 'pending_approval')
+    .eq('approver_id', approverId)
+
+  if (aErr) throw aErr
+  for (const o of byApprover ?? []) byId.set(o.id, o)
+
+  if (workerIds.length > 0) {
+    const { data: byTeam, error: tErr } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('status', 'pending_approval')
+      .in('requestor_id', workerIds)
+
+    if (tErr) throw tErr
+    for (const o of byTeam ?? []) byId.set(o.id, o)
+  }
+
+  const sorted = [...byId.values()].sort(
+    (a, b) => new Date(b.created_at) - new Date(a.created_at)
+  )
+  return enrichOrders(sorted)
+}
+
+async function approverMayActOnOrder(order, approverId) {
+  if (order.approver_id === approverId) return true
+  const { data: requestor } = await supabase
+    .from('users')
+    .select('manager_id')
+    .eq('id', order.requestor_id)
+    .single()
+  return requestor?.manager_id === approverId
+}
 
 const CATEGORIES = [
   'PPE',
@@ -84,7 +163,7 @@ Return ONLY valid JSON, no markdown, no explanation:
     })
 
     const raw = completion.choices[0].message.content
-    const classification = JSON.parse(raw)
+    const classification = parseAiJson(raw)
 
     // Fetch matching products from Supabase
     const { data: products, error } = await supabase
@@ -100,6 +179,280 @@ Return ONLY valid JSON, no markdown, no explanation:
       products
     })
 
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── GET /api/products ───────────────────────────────────────────
+app.get('/api/products', async (req, res) => {
+  const { category, search } = req.query
+
+  try {
+    let query = supabase
+      .from('products')
+      .select('*, suppliers(name)')
+      .order('popularity_score', { ascending: false })
+
+    if (category) query = query.eq('category', category)
+    if (search) query = query.ilike('name', `%${search}%`)
+
+    const { data: products, error } = await query
+    if (error) throw error
+
+    res.json({ products })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── POST /api/orders ────────────────────────────────────────────
+app.post('/api/orders', async (req, res) => {
+  const { requestor_id, product_id, quantity, input_method, ai_classification } =
+    req.body
+
+  if (!requestor_id || !product_id || !quantity || !input_method) {
+    return res.status(400).json({
+      error: 'requestor_id, product_id, quantity, and input_method are required'
+    })
+  }
+
+  try {
+    const { data: product, error: productError } = await supabase
+      .from('products')
+      .select('id, unit_price, name')
+      .eq('id', product_id)
+      .single()
+
+    if (productError) throw productError
+
+    const { data: requestor, error: userError } = await supabase
+      .from('users')
+      .select('id, site_id, budget_limit, manager_id, name')
+      .eq('id', requestor_id)
+      .single()
+
+    if (userError) throw userError
+
+    const total_price = Number(product.unit_price) * Number(quantity)
+    const needsApproval = total_price > Number(requestor.budget_limit)
+
+    let approverId = requestor.manager_id ?? null
+    if (needsApproval && !approverId && requestor.site_id) {
+      const { data: siteApprover } = await supabase
+        .from('users')
+        .select('id')
+        .eq('site_id', requestor.site_id)
+        .eq('role', 'approver')
+        .limit(1)
+        .maybeSingle()
+      approverId = siteApprover?.id ?? null
+    }
+
+    const order = {
+      requestor_id,
+      product_id,
+      quantity,
+      total_price,
+      site_id: requestor.site_id,
+      input_method,
+      ai_classification: ai_classification ?? null,
+      status: needsApproval ? 'pending_approval' : 'approved',
+      approver_id: needsApproval ? approverId : null
+    }
+
+    const { data: created, error: orderError } = await supabase
+      .from('orders')
+      .insert(order)
+      .select('*')
+      .single()
+
+    if (orderError) throw orderError
+    const [enriched] = await enrichOrders([created])
+
+    const { data: current } = await supabase
+      .from('products')
+      .select('popularity_score')
+      .eq('id', product_id)
+      .single()
+
+    await supabase
+      .from('products')
+      .update({ popularity_score: (current?.popularity_score ?? 0) + 1 })
+      .eq('id', product_id)
+
+    res.status(201).json({
+      order: enriched,
+      needs_approval: needsApproval,
+      approver_id: needsApproval ? approverId : null
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── GET /api/orders ─────────────────────────────────────────────
+app.get('/api/orders', async (req, res) => {
+  const { requestor_id, approver_id, status } = req.query
+
+  try {
+    if (approver_id && status === 'pending_approval') {
+      const orders = await fetchPendingForApprover(approver_id)
+      return res.json({ orders })
+    }
+
+    let query = supabase.from('orders').select('*').order('created_at', { ascending: false })
+
+    if (requestor_id) query = query.eq('requestor_id', requestor_id)
+    if (approver_id) query = query.eq('approver_id', approver_id)
+    if (status) query = query.eq('status', status)
+
+    const { data: orders, error } = await query
+    if (error) throw error
+
+    res.json({ orders: await enrichOrders(orders ?? []) })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── POST /api/transcribe ────────────────────────────────────────
+const AUDIO_MIME = {
+  m4a: 'audio/m4a',
+  mp4: 'audio/mp4',
+  caf: 'audio/x-caf',
+  wav: 'audio/wav',
+  mp3: 'audio/mpeg',
+  webm: 'audio/webm',
+  '3gp': 'audio/3gpp'
+}
+
+app.post('/api/transcribe', async (req, res) => {
+  const { audio, filename = 'recording.m4a' } = req.body
+  if (!audio) {
+    return res.status(400).json({ error: 'audio (base64) is required' })
+  }
+
+  try {
+    const buffer = Buffer.from(audio, 'base64')
+    const ext = filename.split('.').pop()?.toLowerCase() || 'm4a'
+    const mime = AUDIO_MIME[ext] ?? 'audio/m4a'
+    const file = await toFile(buffer, filename, { type: mime })
+    const transcription = await openai.audio.transcriptions.create({
+      file,
+      model: 'whisper-1'
+    })
+    res.json({ text: transcription.text })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── GET /api/orders/:id ─────────────────────────────────────────
+app.get('/api/orders/:id', async (req, res) => {
+  try {
+    const { data: order, error } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('id', req.params.id)
+      .single()
+
+    if (error) throw error
+    const [enriched] = await enrichOrders([order])
+    res.json({ order: enriched })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── PATCH /api/orders/:id/approve ───────────────────────────────
+app.patch('/api/orders/:id/approve', async (req, res) => {
+  const { approver_id, approval_note } = req.body
+
+  if (!approver_id) {
+    return res.status(400).json({ error: 'approver_id is required' })
+  }
+
+  try {
+    const { data: existing, error: fetchError } = await supabase
+      .from('orders')
+      .select('id, status, approver_id, requestor_id')
+      .eq('id', req.params.id)
+      .single()
+
+    if (fetchError) throw fetchError
+    if (existing.status !== 'pending_approval') {
+      return res.status(400).json({ error: `Order is ${existing.status}, not pending approval` })
+    }
+    if (!(await approverMayActOnOrder(existing, approver_id))) {
+      return res.status(403).json({ error: 'Not authorized to approve this order' })
+    }
+
+    const { data: order, error } = await supabase
+      .from('orders')
+      .update({
+        status: 'approved',
+        approver_id,
+        approval_note: approval_note ?? null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', req.params.id)
+      .select('*')
+      .single()
+
+    if (error) throw error
+    const [enriched] = await enrichOrders([order])
+    res.json({ order: enriched })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── PATCH /api/orders/:id/reject ────────────────────────────────
+app.patch('/api/orders/:id/reject', async (req, res) => {
+  const { approver_id, approval_note } = req.body
+
+  if (!approver_id) {
+    return res.status(400).json({ error: 'approver_id is required' })
+  }
+
+  try {
+    const { data: existing, error: fetchError } = await supabase
+      .from('orders')
+      .select('id, status, approver_id, requestor_id')
+      .eq('id', req.params.id)
+      .single()
+
+    if (fetchError) throw fetchError
+    if (existing.status !== 'pending_approval') {
+      return res.status(400).json({ error: `Order is ${existing.status}, not pending approval` })
+    }
+    if (!(await approverMayActOnOrder(existing, approver_id))) {
+      return res.status(403).json({ error: 'Not authorized to reject this order' })
+    }
+
+    const { data: order, error } = await supabase
+      .from('orders')
+      .update({
+        status: 'rejected',
+        approver_id,
+        approval_note: approval_note ?? null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', req.params.id)
+      .select('*')
+      .single()
+
+    if (error) throw error
+    const [enriched] = await enrichOrders([order])
+    res.json({ order: enriched })
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: err.message })
