@@ -10,7 +10,7 @@ The two applications are the following:
   
   Upon three big buttons should appear: camera, microphone, text
   
-  That way a user can select which option suits him based based on whether he has the product already avaiable, has gloves on or is in a loud environment.
+  That way a user can select which option suits him best based on whether he has the product already avaiable, has gloves on or is in a loud environment.
   
   #### Image:
   
