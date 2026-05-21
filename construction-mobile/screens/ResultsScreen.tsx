@@ -111,7 +111,7 @@ export function ResultsScreen({ navigation, route }: Props) {
 
       {products.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>No products in this category yet.</Text>
+          <Text style={styles.emptyText}>No matching products yet. Ask procurement to upload a catalog.</Text>
           <Text style={styles.emptyHint}>Run supabase/seed.sql in your Supabase project.</Text>
         </View>
       ) : (

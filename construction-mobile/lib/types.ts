@@ -21,6 +21,7 @@ export type Order = {
   quantity: number
   total_price: number
   approval_note?: string | null
+  po_pdf_url?: string | null
   created_at: string
   products?: { name: string; unit_price: number; category?: string }
 }

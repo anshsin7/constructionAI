@@ -40,13 +40,19 @@ export async function transcribe(
   })
 }
 
+export type PoResult = {
+  po_pdf_url?: string
+  confirm_url?: string
+  email_sent?: boolean
+} | null
+
 export async function createOrder(body: {
   requestor_id: string
   product_id: string
   quantity: number
   input_method: 'image' | 'voice' | 'text'
   ai_classification?: Classification
-}): Promise<{ order: Order; needs_approval: boolean }> {
+}): Promise<{ order: Order; needs_approval: boolean; po?: PoResult }> {
   return request('/api/orders', { method: 'POST', body: JSON.stringify(body) })
 }
 
@@ -67,7 +73,7 @@ export async function approveOrder(
   id: string,
   approver_id: string,
   approval_note?: string
-): Promise<{ order: Order }> {
+): Promise<{ order: Order; po?: PoResult }> {
   return request(`/api/orders/${id}/approve`, {
     method: 'PATCH',
     body: JSON.stringify({ approver_id, approval_note })

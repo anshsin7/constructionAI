@@ -9,17 +9,20 @@ type Props = NativeStackScreenProps<RootStackParamList, 'OrderConfirm'>
 export function OrderConfirmScreen({ navigation, route }: Props) {
   const { product, quantity, order, needsApproval } = route.params
   const name = order.products?.name ?? product.name
+  const poSent = order.status === 'po_sent' || order.status === 'confirmed'
 
   return (
     <SafeAreaView style={styles.safe}>
-      <Text style={styles.emoji}>{needsApproval ? '⏳' : '✅'}</Text>
+      <Text style={styles.emoji}>{needsApproval ? '⏳' : poSent ? '📧' : '✅'}</Text>
       <Text style={styles.title}>
-        {needsApproval ? 'Awaiting Approval' : 'Order Confirmed'}
+        {needsApproval ? 'Awaiting Approval' : poSent ? 'PO Sent' : 'Order Confirmed'}
       </Text>
       <Text style={styles.body}>
         {needsApproval
           ? `Your order for ${quantity}× ${name} (CHF ${order.total_price}) is pending Sara's approval.`
-          : `Your order for ${quantity}× ${name} (CHF ${order.total_price}) was approved automatically.`}
+          : poSent
+            ? `PO emailed to the supplier. Waiting for supplier confirmation.`
+            : `Your order for ${quantity}× ${name} (CHF ${order.total_price}) was approved. PO is being generated.`}
       </Text>
       <Pressable style={styles.button} onPress={() => navigation.popToTop()}>
         <Text style={styles.buttonText}>Back to Home</Text>

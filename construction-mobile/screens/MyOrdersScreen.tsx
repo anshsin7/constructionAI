@@ -3,6 +3,8 @@ import { useCallback, useState } from 'react'
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
+  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
@@ -27,7 +29,14 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 function statusLabel(status: string) {
-  return status.replace(/_/g, ' ')
+  const labels: Record<string, string> = {
+    pending_approval: 'Awaiting approval',
+    approved: 'Approved',
+    rejected: 'Rejected',
+    po_sent: 'PO sent to supplier',
+    confirmed: 'Confirmed by supplier'
+  }
+  return labels[status] ?? status.replace(/_/g, ' ')
 }
 
 export function MyOrdersScreen({ route }: Props) {
@@ -93,6 +102,17 @@ export function MyOrdersScreen({ route }: Props) {
               {item.approval_note && (
                 <Text style={styles.note}>Note: {item.approval_note}</Text>
               )}
+              {item.status === 'po_sent' && (
+                <Text style={styles.hint}>Waiting for supplier to confirm.</Text>
+              )}
+              {item.status === 'confirmed' && (
+                <Text style={styles.hint}>Supplier confirmed this order.</Text>
+              )}
+              {item.po_pdf_url ? (
+                <Pressable onPress={() => Linking.openURL(item.po_pdf_url!)}>
+                  <Text style={styles.pdfLink}>View PO PDF</Text>
+                </Pressable>
+              ) : null}
             </View>
           )}
         />
@@ -124,6 +144,8 @@ const styles = StyleSheet.create({
   },
   badgeText: { color: '#000', fontWeight: '700', fontSize: 13, textTransform: 'capitalize' },
   note: { fontSize: 14, color: colors.muted, marginTop: 8 },
+  hint: { fontSize: 14, color: colors.primary, marginTop: 8 },
+  pdfLink: { fontSize: 16, color: colors.primary, fontWeight: '700', marginTop: 10 },
   empty: { color: colors.muted, textAlign: 'center', marginTop: 40, fontSize: 16 },
   error: { color: colors.danger, paddingHorizontal: 20, paddingBottom: 8, fontSize: 15 }
 })
