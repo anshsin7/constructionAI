@@ -650,48 +650,34 @@ export async function resolveSupplier(supabase, name) {
   return created.id
 }
 
-export async function aiMatchProducts(openai, existingProducts, newRows) {
-  const slimExisting = existingProducts.map((p) => ({
-    id: p.id,
-    name: p.name,
-    sku: p.sku,
-    supplier_id: p.supplier_id,
-    unit_price: p.unit_price
-  }))
+/** Deterministic match — avoids brittle AI JSON on large imports (100+ rows). */
+export function matchRowToExisting(existingProducts, row, supplierId) {
+  if (!supplierId) return { action: 'create', match_product_id: null }
 
-  const slimNew = newRows.map((r) => ({
-    row_id: r.id,
-    name: r.name,
-    sku: r.sku,
-    supplier_name: r.supplier_name,
-    unit_price: r.unit_price
-  }))
+  const sku = String(row.sku ?? '')
+    .trim()
+    .toLowerCase()
+  const name = String(row.name ?? '')
+    .trim()
+    .toLowerCase()
 
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    messages: [
-      {
-        role: 'system',
-        content: `Decide for each NEW product row whether it matches an EXISTING product (same item) or is new.
-Return ONLY JSON: { "decisions": [ { "row_id": "uuid", "action": "create"|"update"|"skip", "match_product_id": "uuid|null" } ] }
-- update: same physical product, refresh price/metadata
-- create: genuinely new SKU/name
-- skip: duplicate junk or unparseable
-Use judgment on name + sku + supplier — screws with different sizes are different products.`
-      },
-      {
-        role: 'user',
-        content: JSON.stringify({ existing: slimExisting, new_rows: slimNew })
-      }
-    ],
-    max_tokens: 4000,
-    temperature: 0.1
-  })
+  const sameSupplier = (existingProducts ?? []).filter((p) => p.supplier_id === supplierId)
 
-  const raw = completion.choices[0].message.content.trim()
-  const trimmed = raw.replace(/^```json?\s*/i, '').replace(/\s*```$/, '')
-  const parsed = JSON.parse(trimmed)
-  return parsed.decisions ?? []
+  if (sku) {
+    const bySku = sameSupplier.find(
+      (p) => String(p.sku ?? '').trim().toLowerCase() === sku
+    )
+    if (bySku) return { action: 'update', match_product_id: bySku.id }
+  }
+
+  if (name) {
+    const byName = sameSupplier.find(
+      (p) => String(p.name ?? '').trim().toLowerCase() === name
+    )
+    if (byName) return { action: 'update', match_product_id: byName.id }
+  }
+
+  return { action: 'create', match_product_id: null }
 }
 
 export async function upsertProduct(supabase, row, supplierId, matchProductId, action) {
