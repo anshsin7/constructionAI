@@ -43,6 +43,8 @@ They also get an overview of all employees on that very site and get to choose t
 
 T.b.d: There should also be a Place where they can upload excels, csvs and other data. So that it creates a unified database for all avaible products from contracts, product lists etc. The tables of that database are still to be decided.
 
+The UI should be similar to COMSTRUCT (We will provide pictures fo their software UI).
+
 
 ### Backend
 
