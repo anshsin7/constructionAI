@@ -46,4 +46,16 @@ T.b.d: There should also be a Place where they can upload excels, csvs and other
 
 ### Backend
 
+Database and processing of orders resides here.
+
+Database is based upon the documents uploaded.
+
+Processing of orders is done the following way:
+
+Order requested -> Order up for approval -> Order approved -> Requestor notified -> AI creates PO PDF, signs, and sends it out automatically -> Once PO is confirmed by Supplier -> Requestor will get Confirmation in App & Sourcing will get a new order in their order history (update costs of site and categories)
+
+
+
+
+
 
