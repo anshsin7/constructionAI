@@ -1,1 +1,1 @@
-# constructionAI
+# AI construction companion
