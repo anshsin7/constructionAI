@@ -4,11 +4,16 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis
 } from 'recharts'
+import { ChartPanel } from '../components/ChartPanel'
+import { CHART_COLORS, formatChf, statusLabel, tooltipStyle } from '../lib/charts'
 import { api, type Employee, type Order } from '../lib/api'
 
 export function SiteDetailPage() {
@@ -68,6 +73,13 @@ export function SiteDetailPage() {
     a.click()
   }
 
+  const statusCounts = orders.reduce<Record<string, number>>((acc, o) => {
+    acc[o.status] = (acc[o.status] ?? 0) + 1
+    return acc
+  }, {})
+  const statusChart = Object.entries(statusCounts).map(([status, count]) => ({ status, count }))
+  const totalOrderValue = orders.reduce((s, o) => s + Number(o.total_price), 0)
+
   if (loading) return <p className="text-slate-400">Loading…</p>
   if (error) return <p className="text-red-400">{error}</p>
 
@@ -76,29 +88,58 @@ export function SiteDetailPage() {
       <Link to="/" className="text-sm text-amber-400 hover:underline">
         ← All sites
       </Link>
-      <h2 className="mt-4 mb-6 text-2xl font-bold">{siteName}</h2>
+      <h2 className="mt-4 mb-2 text-2xl font-bold">{siteName}</h2>
+      <p className="mb-6 text-sm text-slate-400">
+        {orders.length} orders · {formatChf(totalOrderValue)} total value
+      </p>
 
-      <section className="mb-8 rounded-2xl border border-slate-800 bg-slate-900 p-6">
-        <h3 className="mb-4 font-semibold">Spending by category</h3>
-        {chartData.length === 0 ? (
-          <p className="text-slate-500">No confirmed spending yet.</p>
-        ) : (
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis dataKey="category" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                <YAxis tick={{ fill: '#94a3b8' }} />
-                <Tooltip
-                  contentStyle={{ background: '#1e293b', border: 'none' }}
-                  formatter={(v) => [`CHF ${v ?? 0}`, 'Spent']}
-                />
-                <Bar dataKey="amount" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </section>
+      <div className="mb-8 grid gap-6 lg:grid-cols-2">
+        <ChartPanel title="Spending by category">
+          {chartData.length === 0 ? (
+            <p className="text-slate-500">No confirmed spending yet.</p>
+          ) : (
+            <div className="h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis dataKey="category" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                  <YAxis tick={{ fill: '#94a3b8' }} />
+                  <Tooltip {...tooltipStyle} formatter={(v) => [formatChf(Number(v ?? 0)), 'Spent']} />
+                  <Bar dataKey="amount" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </ChartPanel>
+
+        <ChartPanel title="Orders by status">
+          {statusChart.length === 0 ? (
+            <p className="text-slate-500">No orders yet.</p>
+          ) : (
+            <div className="h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={statusChart}
+                    dataKey="count"
+                    nameKey="status"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={48}
+                    outerRadius={78}
+                    label={({ status, count }) => `${statusLabel(status)} (${count})`}
+                  >
+                    {statusChart.map((_, i) => (
+                      <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip {...tooltipStyle} formatter={(v, _n, p) => [v, statusLabel(p.payload.status)]} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </ChartPanel>
+      </div>
 
       <section className="mb-8 rounded-2xl border border-slate-800 bg-slate-900 p-6">
         <div className="mb-4 flex items-center justify-between">

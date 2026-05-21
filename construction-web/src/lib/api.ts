@@ -58,8 +58,51 @@ export type CommittedProduct = {
   suppliers?: { name: string } | null
 }
 
+export type DashboardData = {
+  summary: {
+    site_count: number
+    total_budget: number
+    total_spent: number
+    order_count: number
+    pending_approvals: number
+    catalog_products: number
+  }
+  spending_by_site: {
+    site_id: string
+    name: string
+    spent: number
+    budget: number
+    order_spend: number
+  }[]
+  spending_by_category: { category: string; amount: number }[]
+  orders_by_status: { status: string; count: number }[]
+  top_products: { name: string; category?: string; orders: number; revenue: number }[]
+  top_products_by_orders: { name: string; category?: string; orders: number; revenue: number }[]
+  spending_timeline: { date: string; label: string; amount: number }[]
+  catalog_by_category: { category: string; count: number }[]
+}
+
+export type Product = {
+  id: string
+  name: string
+  category: string
+  unit: string
+  unit_price: number
+  popularity_score: number
+  sku?: string | null
+  suppliers?: { name: string } | null
+}
+
 export const api = {
+  getDashboard: () => request<DashboardData>('/api/dashboard'),
   getSites: () => request<{ sites: Site[] }>('/api/sites'),
+  getProducts: (params?: { category?: string; search?: string }) => {
+    const q = new URLSearchParams()
+    if (params?.category) q.set('category', params.category)
+    if (params?.search) q.set('search', params.search)
+    const qs = q.toString()
+    return request<{ products: Product[] }>(`/api/products${qs ? `?${qs}` : ''}`)
+  },
   getSuppliers: () => request<{ suppliers: { id: string; name: string }[] }>('/api/catalog/suppliers'),
   uploadCatalog: async (
     file: File,

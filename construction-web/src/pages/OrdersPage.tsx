@@ -1,5 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
+import { ChartPanel } from '../components/ChartPanel'
+import { StatCard } from '../components/StatCard'
 import { api, type Order } from '../lib/api'
+import { CHART_COLORS, formatChf, statusLabel, tooltipStyle } from '../lib/charts'
 
 const STATUSES = [
   'all',
@@ -27,12 +31,23 @@ export function OrdersPage() {
       .finally(() => setLoading(false))
   }, [status])
 
+  const statusBreakdown = useMemo(() => {
+    const m: Record<string, number> = {}
+    for (const o of orders) m[o.status] = (m[o.status] ?? 0) + 1
+    return Object.entries(m).map(([status, count]) => ({ status, count }))
+  }, [orders])
+
+  const totalValue = useMemo(
+    () => orders.reduce((s, o) => s + Number(o.total_price), 0),
+    [orders]
+  )
+
   if (loading) return <p className="text-slate-400">Loading orders…</p>
   if (error) return <p className="text-red-400">{error}</p>
 
   return (
-    <div>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+    <div className="space-y-8">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <h2 className="text-2xl font-bold">Order history</h2>
         <select
           value={status}
@@ -46,6 +61,41 @@ export function OrdersPage() {
           ))}
         </select>
       </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard label="Orders shown" value={String(orders.length)} />
+        <StatCard label="Total value" value={formatChf(totalValue)} accent="amber" />
+        <StatCard
+          label="Pending"
+          value={String(orders.filter((o) => o.status === 'pending_approval').length)}
+          accent="red"
+        />
+      </div>
+
+      {statusBreakdown.length > 0 && (
+        <ChartPanel title="Status breakdown (current filter)" className="max-w-md">
+          <div className="h-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={statusBreakdown}
+                  dataKey="count"
+                  nameKey="status"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={70}
+                  label={({ status, count }) => `${statusLabel(status)} (${count})`}
+                >
+                  {statusBreakdown.map((_, i) => (
+                    <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip {...tooltipStyle} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </ChartPanel>
+      )}
 
       <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900">
         <table className="w-full text-left text-sm">

@@ -635,6 +635,122 @@ app.patch('/api/users/:id/budget', async (req, res) => {
   }
 })
 
+// ── GET /api/dashboard — procurement analytics ──────────────────
+const SPENT_STATUSES = ['approved', 'po_sent', 'confirmed']
+
+app.get('/api/dashboard', async (req, res) => {
+  try {
+    const { data: sites, error: sitesErr } = await supabase
+      .from('sites')
+      .select('id, name, total_budget, spent')
+    if (sitesErr) throw sitesErr
+
+    const { data: orders, error: ordersErr } = await supabase
+      .from('orders')
+      .select('id, status, total_price, created_at, site_id, product_id, quantity')
+      .order('created_at', { ascending: false })
+    if (ordersErr) throw ordersErr
+
+    const { data: products, error: prodErr } = await supabase
+      .from('products')
+      .select('id, category, popularity_score, unit_price')
+      .eq('is_active', true)
+    if (prodErr) throw prodErr
+
+    const enriched = await enrichOrders(orders ?? [])
+
+    const ordersByStatus = {}
+    let pendingApprovals = 0
+    const categorySpend = {}
+    const siteSpend = {}
+    const productStats = {}
+    const dailySpend = {}
+
+    for (const o of enriched) {
+      ordersByStatus[o.status] = (ordersByStatus[o.status] ?? 0) + 1
+      if (o.status === 'pending_approval') pendingApprovals++
+
+      if (SPENT_STATUSES.includes(o.status)) {
+        const amount = Number(o.total_price)
+        const cat = o.products?.category ?? 'Other'
+        categorySpend[cat] = (categorySpend[cat] ?? 0) + amount
+        if (o.site_id) siteSpend[o.site_id] = (siteSpend[o.site_id] ?? 0) + amount
+        const day = String(o.created_at).slice(0, 10)
+        dailySpend[day] = (dailySpend[day] ?? 0) + amount
+      }
+
+      const pname = o.products?.name
+      if (pname) {
+        if (!productStats[pname]) {
+          productStats[pname] = { name: pname, category: o.products?.category, orders: 0, revenue: 0 }
+        }
+        productStats[pname].orders += 1
+        productStats[pname].revenue += Number(o.total_price)
+      }
+    }
+
+    const catalogByCategory = {}
+    for (const p of products ?? []) {
+      catalogByCategory[p.category] = (catalogByCategory[p.category] ?? 0) + 1
+    }
+
+    const days = []
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(d.getDate() - i)
+      days.push(d.toISOString().slice(0, 10))
+    }
+
+    const spendingTimeline = days.map((date) => ({
+      date,
+      label: new Date(date + 'T12:00:00').toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric'
+      }),
+      amount: Math.round((dailySpend[date] ?? 0) * 100) / 100
+    }))
+
+    const siteList = sites ?? []
+    res.json({
+      summary: {
+        site_count: siteList.length,
+        total_budget: siteList.reduce((s, x) => s + Number(x.total_budget), 0),
+        total_spent: siteList.reduce((s, x) => s + Number(x.spent), 0),
+        order_count: enriched.length,
+        pending_approvals: pendingApprovals,
+        catalog_products: products?.length ?? 0
+      },
+      spending_by_site: siteList.map((s) => ({
+        site_id: s.id,
+        name: s.name,
+        spent: Number(s.spent),
+        budget: Number(s.total_budget),
+        order_spend: siteSpend[s.id] ?? 0
+      })),
+      spending_by_category: Object.entries(categorySpend)
+        .map(([category, amount]) => ({ category, amount }))
+        .sort((a, b) => b.amount - a.amount),
+      orders_by_status: Object.entries(ordersByStatus).map(([status, count]) => ({
+        status,
+        count
+      })),
+      top_products: Object.values(productStats)
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 10),
+      top_products_by_orders: Object.values(productStats)
+        .sort((a, b) => b.orders - a.orders)
+        .slice(0, 10),
+      spending_timeline: spendingTimeline,
+      catalog_by_category: Object.entries(catalogByCategory)
+        .map(([category, count]) => ({ category, count }))
+        .sort((a, b) => b.count - a.count)
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // ── Health check ────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' })

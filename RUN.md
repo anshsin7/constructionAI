@@ -167,9 +167,12 @@ Open **http://localhost:5173**
 
 | Page | What you see |
 |------|----------------|
-| `/` | Site cards with budget bars |
-| `/sites/:id` | Category chart, orders table, edit employee budgets |
-| `/orders` | All orders + status filter + PO PDF modal |
+| `/` | Dashboard — KPIs, category spend chart, site cards |
+| `/insights` | Full analytics — trends, status pie, top products, catalog breakdown |
+| `/catalog` | Product catalog table + category & popularity charts |
+| `/sites/:id` | Category bar + status pie, orders, employee budgets |
+| `/orders` | Order table + status breakdown chart |
+| `/upload` | Catalog upload (CSV / XLSX / PDF) |
 
 ---
 

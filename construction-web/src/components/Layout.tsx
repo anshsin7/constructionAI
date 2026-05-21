@@ -2,9 +2,11 @@ import { Link, Outlet, useLocation } from 'react-router-dom'
 import { API_URL } from '../lib/api'
 
 const nav = [
-  { to: '/', label: 'Sites' },
-  { to: '/orders', label: 'Orders' },
-  { to: '/upload', label: 'Catalog upload' }
+  { to: '/', label: 'Dashboard', match: (p: string) => p === '/' },
+  { to: '/insights', label: 'Insights', match: (p: string) => p === '/insights' },
+  { to: '/catalog', label: 'Catalog', match: (p: string) => p.startsWith('/catalog') },
+  { to: '/orders', label: 'Orders', match: (p: string) => p === '/orders' },
+  { to: '/upload', label: 'Upload', match: (p: string) => p.startsWith('/upload') }
 ]
 
 export function Layout() {
@@ -19,12 +21,12 @@ export function Layout() {
             <p className="text-xs text-slate-500">Procurement dashboard</p>
           </div>
           <nav className="flex gap-2">
-            {nav.map(({ to, label }) => (
+            {nav.map(({ to, label, match }) => (
               <Link
                 key={to}
                 to={to}
-                className={`rounded-lg px-4 py-2 text-sm font-semibold ${
-                  pathname === to || (to === '/upload' && pathname.startsWith('/upload'))
+                className={`rounded-lg px-3 py-2 text-sm font-semibold ${
+                  match(pathname)
                     ? 'bg-amber-500 text-slate-900'
                     : 'text-slate-300 hover:bg-slate-800'
                 }`}
@@ -35,7 +37,7 @@ export function Layout() {
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-6 py-8">
+      <main className="mx-auto max-w-7xl px-6 py-8">
         <Outlet />
       </main>
       <footer className="mx-auto max-w-6xl px-6 pb-8 text-center text-xs text-slate-600">
