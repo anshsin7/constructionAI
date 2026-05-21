@@ -7,12 +7,19 @@ alter table users disable row level security;
 alter table suppliers disable row level security;
 alter table products disable row level security;
 alter table orders disable row level security;
+alter table product_aliases disable row level security;
+alter table catalog_uploads disable row level security;
+alter table catalog_upload_rows disable row level security;
 
 insert into sites (id, name, location, total_budget, spent) values
   ('11111111-1111-1111-1111-111111111101', 'Zürich HB Tower', 'Zürich', 50000, 1200)
 on conflict (id) do nothing;
 
 -- Sara first (Marco references her as manager)
+insert into users (id, name, email, role, site_id, budget_limit, manager_id) values
+  ('22222222-2222-2222-2222-222222222203', 'Procurement', 'procurement@demo.ch', 'procurement', null, 0, null)
+on conflict (id) do update set name = excluded.name, role = excluded.role;
+
 insert into users (id, name, email, role, site_id, budget_limit, manager_id) values
   ('22222222-2222-2222-2222-222222222202', 'Sara', 'sara@demo.ch', 'approver', '11111111-1111-1111-1111-111111111101', 500, null)
 on conflict (id) do update set
@@ -32,8 +39,11 @@ on conflict (id) do update set
   manager_id = excluded.manager_id;
 
 insert into suppliers (id, name, email, contract_ref) values
-  ('33333333-3333-3333-3333-333333333301', 'BauSupply AG', 'orders@bausupply.ch', 'CTR-2024-001')
-on conflict (id) do nothing;
+  ('33333333-3333-3333-3333-333333333301', 'BauSupply AG', null, 'CTR-2024-001')
+on conflict (id) do update set
+  name = excluded.name,
+  email = excluded.email,
+  contract_ref = excluded.contract_ref;
 
 insert into products (id, name, category, description, unit, unit_price, supplier_id, popularity_score) values
   ('44444444-4444-4444-4444-444444444401', 'Hard Hat EN397', 'PPE', 'Industrial safety helmet', 'piece', 18.50, '33333333-3333-3333-3333-333333333301', 12),

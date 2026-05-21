@@ -40,6 +40,54 @@ create table if not exists products (
   supplier_id uuid references suppliers(id),
   popularity_score integer not null default 0,
   image_url text,
+  sku text,
+  is_active boolean not null default true,
+  search_text text,
+  keywords jsonb not null default '[]'::jsonb,
+  size_spec text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists product_aliases (
+  id uuid primary key default gen_random_uuid(),
+  product_id uuid not null references products(id) on delete cascade,
+  alias text not null,
+  source text not null default 'import',
+  created_at timestamptz not null default now()
+);
+
+create table if not exists catalog_uploads (
+  id uuid primary key default gen_random_uuid(),
+  file_name text not null,
+  file_type text not null check (file_type in ('csv', 'xlsx', 'pdf')),
+  source_type text not null check (source_type in ('contract', 'price_list', 'quote')),
+  supplier_name text,
+  status text not null default 'preview'
+    check (status in ('preview', 'committed', 'failed')),
+  uploaded_by uuid references users(id),
+  row_count integer not null default 0,
+  skipped_no_price integer not null default 0,
+  error_message text,
+  created_at timestamptz not null default now(),
+  committed_at timestamptz
+);
+
+create table if not exists catalog_upload_rows (
+  id uuid primary key default gen_random_uuid(),
+  upload_id uuid not null references catalog_uploads(id) on delete cascade,
+  row_index integer not null,
+  name text not null,
+  category text not null,
+  unit text not null default 'piece',
+  unit_price numeric not null,
+  sku text,
+  supplier_name text,
+  keywords jsonb not null default '[]'::jsonb,
+  aliases jsonb not null default '[]'::jsonb,
+  size_spec text,
+  match_product_id uuid references products(id),
+  action text not null default 'create' check (action in ('create', 'update', 'skip')),
+  confidence text,
   created_at timestamptz not null default now()
 );
 

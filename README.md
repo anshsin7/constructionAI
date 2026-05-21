@@ -41,7 +41,7 @@ They will get an overview with cards of the spending of all the different sites.
 
 They also get an overview of all employees on that very site and get to choose their budget.
 
-T.b.d: There should also be a Place where they can upload excels, csvs and other data. So that it creates a unified database for all avaible products from contracts, product lists etc. The tables of that database are still to be decided.
+Procurement uploads contracts, price lists, and quotes (CSV/XLSX/PDF) via the web dashboard **Catalog upload** page. AI extracts products into the unified catalog; mobile search uses keywords, categories, and popularity (see `databaseModelingOutline.md` and `RUN.md`).
 
 The UI should be similar to COMSTRUCT (We will provide pictures fo their software UI).
 

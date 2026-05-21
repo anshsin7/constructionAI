@@ -2,7 +2,9 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useCallback, useState } from 'react'
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
+  Keyboard,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -52,11 +54,23 @@ export function ApprovalsScreen({ route }: Props) {
 
   async function act(id: string, action: 'approve' | 'reject') {
     setActingId(id)
+    setError(null)
     try {
-      if (action === 'approve') await approveOrder(id, user.id, note || undefined)
-      else await rejectOrder(id, user.id, note || undefined)
+      if (action === 'approve') {
+        const { order, po } = await approveOrder(id, user.id, note || undefined)
+        const msg = po?.email_sent
+          ? `PO emailed to supplier.\nStatus: ${order.status}`
+          : po?.po_pdf_url
+            ? `PO saved (status: ${order.status}).\nEmail skipped — check backend terminal for confirm link.`
+            : `Approved. PO may still be processing.\nStatus: ${order.status}`
+        Alert.alert('Approved', msg)
+      } else {
+        await rejectOrder(id, user.id, note || undefined)
+      }
       setNote('')
       await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Action failed')
     } finally {
       setActingId(null)
     }
@@ -72,13 +86,21 @@ export function ApprovalsScreen({ route }: Props) {
         placeholderTextColor={colors.muted}
         value={note}
         onChangeText={setNote}
+        returnKeyType="done"
+        blurOnSubmit
+        onSubmitEditing={Keyboard.dismiss}
       />
+      <Pressable onPress={Keyboard.dismiss} style={styles.dismissNote}>
+        <Text style={styles.dismissNoteText}>Dismiss keyboard</Text>
+      </Pressable>
       {loading ? (
         <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
       ) : (
         <FlatList
           data={orders}
           keyExtractor={(o) => o.id}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
           refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.primary} />}
           contentContainerStyle={styles.list}
           ListEmptyComponent={<Text style={styles.empty}>No pending requests.</Text>}
@@ -125,6 +147,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border
   },
+  dismissNote: { alignItems: 'center', paddingBottom: 8 },
+  dismissNoteText: { color: colors.muted, fontSize: 14 },
   list: { padding: 16, paddingBottom: 32 },
   card: {
     backgroundColor: colors.card,

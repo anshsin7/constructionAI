@@ -16,8 +16,11 @@ In [supabase.com/dashboard](https://supabase.com/dashboard) → your project →
 | 2 | `supabase/schema.sql` |
 | 3 | `supabase/seed.sql` |
 | 4 | `supabase/fix-approvals.sql` — fixes Marco → Sara + disables RLS |
+| 5 | `supabase/catalog-migration.sql` — product catalog upload tables + columns |
 
-Check **Table Editor** → `products` should have 5 rows, `users` should have Marco & Sara.
+Check **Table Editor** → `products` should have 5 rows, `users` should have Marco, Sara & Procurement.
+
+**Catalog upload (procurement web):** After migration, open the web dashboard → **Catalog upload** (`/upload`). Upload CSV, XLSX, or PDF (max 15 pages).
 
 ### 2. Backend env
 
@@ -40,6 +43,8 @@ cd construction-mobile
 cp .env.example .env
 ```
 
+Mobile only needs `EXPO_PUBLIC_API_URL` — **not** Supabase secret keys. See `construction-mobile/MOBILE-ENV.md`.
+
 Default is fine for **iOS Simulator**:
 
 ```env
@@ -50,7 +55,9 @@ EXPO_PUBLIC_API_URL=http://localhost:3001
 |----------------------|------------------------|
 | iOS Simulator | `http://localhost:3001` |
 | Android emulator | `http://10.0.2.2:3001` |
-| Physical phone (Expo Go) | `http://YOUR_MAC_IP:3001` |
+| Physical phone (Expo Go) | Auto-uses Mac IP from Metro, or set `http://YOUR_MAC_IP:3001` |
+
+**Expo Go:** Phone and Mac on the **same Wi‑Fi**. Home screen shows `API: http://192.168.x.x:3001` — must not be `localhost`.
 
 Find Mac IP: **System Settings → Network**, or terminal: `ipconfig getifaddr en0`
 
@@ -124,6 +131,48 @@ Then in the Expo terminal:
 | **Microphone** | Not supported — use **Text** instead | Tap record → stop → search |
 
 After code changes, restart Expo: `Ctrl+C` in the mobile terminal, then `npm start` again.
+
+---
+
+## Step 5 — PO + supplier email (one-time)
+
+1. Supabase SQL Editor → run `supabase/storage.sql` (creates `po-documents` bucket)
+2. Add to `construction-backend/.env`:
+   - `SUPABASE_SERVICE_ROLE_KEY` (Settings → API → service_role) — needed for PDF upload
+   - `RESEND_API_KEY` from [resend.com](https://resend.com) (optional)
+   - `PO_TEST_EMAIL=you@example.com` — **only** address that receives PO emails (supplier DB email is always null)
+   - `APP_BASE_URL=http://YOUR_MAC_IP:3001` when testing confirm links on phone
+3. Restart backend
+
+When Sara **approves** (or Marco auto-approves a small order), the backend generates a PDF, uploads it, emails the supplier, and sets status to `po_sent`.
+
+**Supplier confirm link** (open in browser):
+
+`http://localhost:3001/confirm?po=<order-uuid>`
+
+---
+
+## Step 6 — Web dashboard (procurement)
+
+**Terminal 3** (backend must be running):
+
+```bash
+cd construction-web
+cp .env.example .env
+npm install
+npm run dev
+```
+
+Open **http://localhost:5173**
+
+| Page | What you see |
+|------|----------------|
+| `/` | Dashboard — KPIs, category spend chart, site cards |
+| `/insights` | Full analytics — trends, status pie, top products, catalog breakdown |
+| `/catalog` | Product catalog table + category & popularity charts |
+| `/sites/:id` | Category bar + status pie, orders, employee budgets |
+| `/orders` | Order table + status breakdown chart |
+| `/upload` | Catalog upload (CSV / XLSX / PDF) |
 
 ---
 

@@ -3,6 +3,10 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
 import OpenAI, { toFile } from 'openai'
+import { confirmPurchaseOrder, fulfillPurchaseOrder } from './lib/poPipeline.js'
+import { CATEGORIES } from './lib/categories.js'
+import { rankProducts } from './lib/productSearch.js'
+import { createCatalogRouter } from './routes/catalog.js'
 
 dotenv.config()
 
@@ -82,6 +86,15 @@ async function fetchPendingForApprover(approverId) {
   return enrichOrders(sorted)
 }
 
+async function tryAutoPo(orderId) {
+  try {
+    return await fulfillPurchaseOrder(supabase, orderId)
+  } catch (err) {
+    console.error('[PO]', err.message)
+    return null
+  }
+}
+
 async function approverMayActOnOrder(order, approverId) {
   if (order.approver_id === approverId) return true
   const { data: requestor } = await supabase
@@ -92,17 +105,7 @@ async function approverMayActOnOrder(order, approverId) {
   return requestor?.manager_id === approverId
 }
 
-const CATEGORIES = [
-  'PPE',
-  'Power Tools',
-  'Fasteners',
-  'Concrete & Masonry',
-  'Lumber & Wood',
-  'Electrical',
-  'Plumbing',
-  'Hand Tools',
-  'Other'
-]
+app.use('/api/catalog', createCatalogRouter(supabase, openai))
 
 // ── POST /api/classify ──────────────────────────────────────────
 app.post('/api/classify', async (req, res) => {
@@ -126,10 +129,14 @@ app.post('/api/classify', async (req, res) => {
               type: 'text',
               text: `You are a construction site procurement assistant.
 Analyze this image and identify what construction product or material is shown or needed.
-Return ONLY valid JSON, no markdown, no explanation:
+Infer dimensions (e.g. screw size M8x80) when visible.
+Return ONLY valid JSON, no markdown:
 {
   "category": "<one of: ${CATEGORIES.join(' | ')}>",
-  "matched_product_name": "<best guess at specific product name, or null>",
+  "matched_product_name": "<specific product name in English or null>",
+  "search_query": "<short english search phrase for catalog>",
+  "keywords": ["english", "terms"],
+  "size_spec": "<dimensions if known, else null>",
   "confidence": "<high | medium | low>",
   "reasoning": "<one sentence>"
 }`
@@ -142,13 +149,16 @@ Return ONLY valid JSON, no markdown, no explanation:
         {
           role: 'user',
           content: `You are a construction site procurement assistant.
-A worker needs a product. Classify their request into the correct category.
+A worker needs a product. Understand their request in any language; respond with English catalog terms.
 Worker said: "${data}"
 
-Return ONLY valid JSON, no markdown, no explanation:
+Return ONLY valid JSON, no markdown:
 {
   "category": "<one of: ${CATEGORIES.join(' | ')}>",
-  "matched_product_name": "<best guess at specific product name, or null>",
+  "matched_product_name": "<specific product name in English or null>",
+  "search_query": "<short english search phrase>",
+  "keywords": ["english", "terms"],
+  "size_spec": "<dimensions if mentioned e.g. 7.5x92mm, else null>",
   "confidence": "<high | medium | low>",
   "reasoning": "<one sentence>"
 }`
@@ -159,20 +169,22 @@ Return ONLY valid JSON, no markdown, no explanation:
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages,
-      max_tokens: 200
+      max_tokens: 400
     })
 
     const raw = completion.choices[0].message.content
     const classification = parseAiJson(raw)
 
-    // Fetch matching products from Supabase
-    const { data: products, error } = await supabase
+    const { data: catalog, error } = await supabase
       .from('products')
-      .select('*, suppliers(name)')
-      .eq('category', classification.category)
+      .select('*, suppliers(name), product_aliases(alias)')
+      .eq('is_active', true)
       .order('popularity_score', { ascending: false })
+      .limit(500)
 
     if (error) throw error
+
+    const products = rankProducts(catalog ?? [], classification, 50)
 
     res.json({
       classification,
@@ -193,10 +205,14 @@ app.get('/api/products', async (req, res) => {
     let query = supabase
       .from('products')
       .select('*, suppliers(name)')
+      .eq('is_active', true)
       .order('popularity_score', { ascending: false })
 
     if (category) query = query.eq('category', category)
-    if (search) query = query.ilike('name', `%${search}%`)
+    if (search) {
+      const q = `%${search}%`
+      query = query.or(`name.ilike.${q},search_text.ilike.${q}`)
+    }
 
     const { data: products, error } = await query
     if (error) throw error
@@ -222,11 +238,14 @@ app.post('/api/orders', async (req, res) => {
   try {
     const { data: product, error: productError } = await supabase
       .from('products')
-      .select('id, unit_price, name')
+      .select('id, unit_price, name, is_active')
       .eq('id', product_id)
       .single()
 
     if (productError) throw productError
+    if (product.is_active === false) {
+      return res.status(400).json({ error: 'Product is no longer available' })
+    }
 
     const { data: requestor, error: userError } = await supabase
       .from('users')
@@ -283,10 +302,14 @@ app.post('/api/orders', async (req, res) => {
       .update({ popularity_score: (current?.popularity_score ?? 0) + 1 })
       .eq('id', product_id)
 
+    const po = needsApproval ? null : await tryAutoPo(created.id)
+    const orderOut = po?.order ? (await enrichOrders([po.order]))[0] : enriched
+
     res.status(201).json({
-      order: enriched,
+      order: orderOut,
       needs_approval: needsApproval,
-      approver_id: needsApproval ? approverId : null
+      approver_id: needsApproval ? approverId : null,
+      po
     })
   } catch (err) {
     console.error(err)
@@ -408,7 +431,9 @@ app.patch('/api/orders/:id/approve', async (req, res) => {
 
     if (error) throw error
     const [enriched] = await enrichOrders([order])
-    res.json({ order: enriched })
+    const po = await tryAutoPo(req.params.id)
+    const orderOut = po?.order ? (await enrichOrders([po.order]))[0] : enriched
+    res.json({ order: orderOut, po })
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: err.message })
@@ -459,11 +484,280 @@ app.patch('/api/orders/:id/reject', async (req, res) => {
   }
 })
 
+// ── POST /api/orders/:id/po ─────────────────────────────────────
+app.post('/api/orders/:id/po', async (req, res) => {
+  try {
+    const result = await fulfillPurchaseOrder(supabase, req.params.id)
+    const [order] = await enrichOrders([result.order])
+    res.json({ ...result, order })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── POST /api/supplier/confirm ──────────────────────────────────
+app.post('/api/supplier/confirm', async (req, res) => {
+  const orderId = req.body.po ?? req.body.order_id ?? req.query.po
+  if (!orderId) {
+    return res.status(400).json({ error: 'po (order id) is required' })
+  }
+  try {
+    const result = await confirmPurchaseOrder(supabase, orderId)
+    const [order] = await enrichOrders([result.order])
+    res.json({ ...result, order })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── GET /confirm?po=<orderId> — supplier link from email ────────
+app.get('/confirm', async (req, res) => {
+  const orderId = req.query.po
+  if (!orderId) {
+    return res.status(400).send('<h1>Missing po query parameter</h1>')
+  }
+  try {
+    const result = await confirmPurchaseOrder(supabase, orderId)
+    const [order] = await enrichOrders([result.order])
+    const name = order.products?.name ?? 'your order'
+    res.send(`<!DOCTYPE html><html><body style="font-family:sans-serif;padding:40px">
+      <h1>Order confirmed</h1>
+      <p>PO for <strong>${name}</strong> is confirmed. The site team has been notified.</p>
+      <p>Status: ${order.status}</p>
+    </body></html>`)
+  } catch (err) {
+    res.status(500).send(`<h1>Error</h1><p>${err.message}</p>`)
+  }
+})
+
+// ── GET /api/sites ──────────────────────────────────────────────
+app.get('/api/sites', async (req, res) => {
+  try {
+    const { data: sites, error } = await supabase.from('sites').select('*').order('name')
+    if (error) throw error
+
+    const { data: orders } = await supabase
+      .from('orders')
+      .select('id, site_id, status')
+      .in('status', ['pending_approval', 'approved', 'po_sent'])
+
+    const activeBySite = {}
+    for (const o of orders ?? []) {
+      if (o.site_id) activeBySite[o.site_id] = (activeBySite[o.site_id] ?? 0) + 1
+    }
+
+    res.json({
+      sites: (sites ?? []).map((s) => ({
+        ...s,
+        active_orders: activeBySite[s.id] ?? 0
+      }))
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── GET /api/sites/:id ──────────────────────────────────────────
+app.get('/api/sites/:id', async (req, res) => {
+  try {
+    const { data: site, error: siteError } = await supabase
+      .from('sites')
+      .select('*')
+      .eq('id', req.params.id)
+      .single()
+
+    if (siteError) throw siteError
+
+    const { data: orders, error: ordersError } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('site_id', req.params.id)
+      .order('created_at', { ascending: false })
+
+    if (ordersError) throw ordersError
+
+    const enriched = await enrichOrders(orders ?? [])
+
+    const { data: users, error: usersError } = await supabase
+      .from('users')
+      .select('id, name, email, role, budget_limit')
+      .eq('site_id', req.params.id)
+      .order('name')
+
+    if (usersError) throw usersError
+
+    const spendingByCategory = {}
+    for (const o of enriched) {
+      if (!['approved', 'po_sent', 'confirmed'].includes(o.status)) continue
+      const cat = o.products?.category ?? 'Other'
+      spendingByCategory[cat] = (spendingByCategory[cat] ?? 0) + Number(o.total_price)
+    }
+
+    const categoryBreakdown = Object.entries(spendingByCategory)
+      .map(([category, amount]) => ({ category, amount }))
+      .sort((a, b) => b.amount - a.amount)
+
+    res.json({
+      site,
+      orders: enriched,
+      employees: users ?? [],
+      category_breakdown: categoryBreakdown
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── PATCH /api/users/:id/budget ─────────────────────────────────
+app.patch('/api/users/:id/budget', async (req, res) => {
+  const { budget_limit } = req.body
+  if (budget_limit === undefined || budget_limit === null) {
+    return res.status(400).json({ error: 'budget_limit is required' })
+  }
+
+  try {
+    const { data: user, error } = await supabase
+      .from('users')
+      .update({ budget_limit: Number(budget_limit) })
+      .eq('id', req.params.id)
+      .select('id, name, email, role, budget_limit, site_id')
+      .single()
+
+    if (error) throw error
+    res.json({ user })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── GET /api/dashboard — procurement analytics ──────────────────
+const SPENT_STATUSES = ['approved', 'po_sent', 'confirmed']
+
+app.get('/api/dashboard', async (req, res) => {
+  try {
+    const { data: sites, error: sitesErr } = await supabase
+      .from('sites')
+      .select('id, name, total_budget, spent')
+    if (sitesErr) throw sitesErr
+
+    const { data: orders, error: ordersErr } = await supabase
+      .from('orders')
+      .select('id, status, total_price, created_at, site_id, product_id, quantity')
+      .order('created_at', { ascending: false })
+    if (ordersErr) throw ordersErr
+
+    const { data: products, error: prodErr } = await supabase
+      .from('products')
+      .select('id, category, popularity_score, unit_price')
+      .eq('is_active', true)
+    if (prodErr) throw prodErr
+
+    const enriched = await enrichOrders(orders ?? [])
+
+    const ordersByStatus = {}
+    let pendingApprovals = 0
+    const categorySpend = {}
+    const siteSpend = {}
+    const productStats = {}
+    const dailySpend = {}
+
+    for (const o of enriched) {
+      ordersByStatus[o.status] = (ordersByStatus[o.status] ?? 0) + 1
+      if (o.status === 'pending_approval') pendingApprovals++
+
+      if (SPENT_STATUSES.includes(o.status)) {
+        const amount = Number(o.total_price)
+        const cat = o.products?.category ?? 'Other'
+        categorySpend[cat] = (categorySpend[cat] ?? 0) + amount
+        if (o.site_id) siteSpend[o.site_id] = (siteSpend[o.site_id] ?? 0) + amount
+        const day = String(o.created_at).slice(0, 10)
+        dailySpend[day] = (dailySpend[day] ?? 0) + amount
+      }
+
+      const pname = o.products?.name
+      if (pname) {
+        if (!productStats[pname]) {
+          productStats[pname] = { name: pname, category: o.products?.category, orders: 0, revenue: 0 }
+        }
+        productStats[pname].orders += 1
+        productStats[pname].revenue += Number(o.total_price)
+      }
+    }
+
+    const catalogByCategory = {}
+    for (const p of products ?? []) {
+      catalogByCategory[p.category] = (catalogByCategory[p.category] ?? 0) + 1
+    }
+
+    const days = []
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(d.getDate() - i)
+      days.push(d.toISOString().slice(0, 10))
+    }
+
+    const spendingTimeline = days.map((date) => ({
+      date,
+      label: new Date(date + 'T12:00:00').toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric'
+      }),
+      amount: Math.round((dailySpend[date] ?? 0) * 100) / 100
+    }))
+
+    const siteList = sites ?? []
+    res.json({
+      summary: {
+        site_count: siteList.length,
+        total_budget: siteList.reduce((s, x) => s + Number(x.total_budget), 0),
+        total_spent: siteList.reduce((s, x) => s + Number(x.spent), 0),
+        order_count: enriched.length,
+        pending_approvals: pendingApprovals,
+        catalog_products: products?.length ?? 0
+      },
+      spending_by_site: siteList.map((s) => ({
+        site_id: s.id,
+        name: s.name,
+        spent: Number(s.spent),
+        budget: Number(s.total_budget),
+        order_spend: siteSpend[s.id] ?? 0
+      })),
+      spending_by_category: Object.entries(categorySpend)
+        .map(([category, amount]) => ({ category, amount }))
+        .sort((a, b) => b.amount - a.amount),
+      orders_by_status: Object.entries(ordersByStatus).map(([status, count]) => ({
+        status,
+        count
+      })),
+      top_products: Object.values(productStats)
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 10),
+      top_products_by_orders: Object.values(productStats)
+        .sort((a, b) => b.orders - a.orders)
+        .slice(0, 10),
+      spending_timeline: spendingTimeline,
+      catalog_by_category: Object.entries(catalogByCategory)
+        .map(([category, count]) => ({ category, count }))
+        .sort((a, b) => b.count - a.count)
+    })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // ── Health check ────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' })
 })
 
-app.listen(process.env.PORT, () => {
-  console.log(`Backend running on port ${process.env.PORT}`)
+const port = process.env.PORT || 3001
+app.listen(port, '0.0.0.0', () => {
+  console.log(`Backend running on http://0.0.0.0:${port}`)
+  console.log('Expo Go on phone: use your Mac LAN IP, not localhost')
 })

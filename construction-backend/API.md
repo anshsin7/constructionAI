@@ -51,6 +51,25 @@ Order detail.
 ### `PATCH /api/orders/:id/reject`
 Same body shape as approve.
 
+### `POST /api/orders/:id/po`
+Generate PO PDF, upload to Supabase Storage, email `PO_TEST_EMAIL` from `.env` (never supplier DB email), set status `po_sent`.  
+(Also runs automatically after approve / auto-approve.)
+
+### `GET /confirm?po=<orderId>`
+Supplier confirmation page — sets order to `confirmed` and updates site spend.
+
+### `POST /api/supplier/confirm`
+Body: `{ "po": "<orderId>" }` — same as GET confirm, returns JSON.
+
+### `GET /api/sites`
+List sites with `active_orders` count.
+
+### `GET /api/sites/:id`
+Site detail: `orders`, `employees`, `category_breakdown`.
+
+### `PATCH /api/users/:id/budget`
+Body: `{ "budget_limit": 50 }`
+
 ## Quick test (after seed)
 
 ```bash

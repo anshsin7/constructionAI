@@ -11,6 +11,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { classify } from '../lib/api'
+import { API_URL } from '../lib/config'
 import type { RootStackParamList } from '../navigation/types'
 import { colors } from '../lib/theme'
 import { MARCO, SARA, type DemoUser } from '../lib/users'
@@ -136,6 +137,7 @@ export function HomeScreen({ navigation, user, onSwitchUser }: Props) {
       )}
 
       <View style={styles.footer}>
+        <Text style={styles.apiHint}>API: {API_URL}</Text>
         <Pressable onPress={() => navigation.navigate('MyOrders', { user })}>
           <Text style={styles.link}>My Orders</Text>
         </Pressable>
@@ -179,7 +181,8 @@ const styles = StyleSheet.create({
   bigEmoji: { fontSize: 36, marginBottom: 8 },
   bigLabel: { fontSize: 24, fontWeight: '800', color: colors.text },
   bigHint: { fontSize: 15, color: colors.muted, marginTop: 4 },
-  footer: { padding: 24, gap: 16, alignItems: 'center' },
+  footer: { padding: 24, gap: 12, alignItems: 'center' },
+  apiHint: { fontSize: 11, color: colors.muted, textAlign: 'center' },
   link: { fontSize: 18, color: colors.muted, fontWeight: '600' },
   linkAccent: { color: colors.primary }
 })

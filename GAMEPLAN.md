@@ -36,6 +36,9 @@ Test it with Postman or even just a curl command. Try a photo of a hard hat, try
 
 ---
 
+### ✅ Step 3–6 — Backend + mobile + web
+Steps 3–6 implemented: orders, approvals, PO PDF, email, supplier confirm, procurement dashboard in `construction-web`.
+
 ### 🥉 Step 3 — Backend API Routes (2-3h)
 Build the core order flow routes in sequence:
 1. `GET /api/products` — fetch products by category
