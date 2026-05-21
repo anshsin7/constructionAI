@@ -33,4 +33,17 @@ The two applications are the following:
   
   If he does however approve or doesn't need approval in the first place, he will receive confirmation that the order is pending. The backend will then create the PO and send it to the supplier. AI will then read the response from the supplier and once he accepts the PO, confirmation will be sent to requestor stating that order has been executed.
 
-  
+### Web App for Procurement
+
+Still to be decided...
+
+They will get an overview with cards of the spending of all the different sites. They can click on these cards, and will then get a detailed overview of the spending in different categories. They will also get a history of recent purchases with information regarding what was bought, site, requestor, approver.
+
+They also get an overview of all employees on that very site and get to choose their budget.
+
+T.b.d: There should also be a Place where they can upload excels, csvs and other data. So that it creates a unified database for all avaible products from contracts, product lists etc. The tables of that database are still to be decided.
+
+
+### Backend
+
+
