@@ -1,3 +1,4 @@
 node_modules/
 .env
 construction-backend/.env
+construction-mobile/.env
