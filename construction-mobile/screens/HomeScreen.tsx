@@ -83,7 +83,7 @@ export function HomeScreen({ navigation, user, onSwitchUser }: Props) {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
-        <Text style={styles.title}>Site Procurement</Text>
+        <Text style={styles.title}>SiteFlow</Text>
         <Text style={styles.subtitle}>
           Logged in as {user.name} ({user.role})
         </Text>

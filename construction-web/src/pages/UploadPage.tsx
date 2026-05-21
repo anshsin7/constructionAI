@@ -70,6 +70,10 @@ export function UploadPage() {
     setError(null)
     try {
       const result = await api.commitCatalog(uploadId)
+      if (!result.created_or_updated) {
+        setError('Import finished but no products were saved.')
+        return
+      }
       setCommitted(result.products)
       setStep('done')
     } catch (e) {
@@ -95,7 +99,7 @@ export function UploadPage() {
       <p className="mb-6 text-sm text-slate-400">
         Import contracts, price lists, or quotes (CSV, XLSX, PDF up to 15 pages). All files are
         parsed with AI (PDFs use vision for scans). May take 30–90 seconds for large Excel files.
-        products; rows without a price are skipped.
+        Rows without a price are skipped.
       </p>
 
       {error && (
@@ -175,6 +179,11 @@ export function UploadPage() {
 
       {step === 'preview' && (
         <div>
+          {error && (
+            <p className="mb-4 rounded-lg border border-red-800 bg-red-950/50 px-4 py-3 text-red-300">
+              {error}
+            </p>
+          )}
           {skipped > 0 && (
             <p className="mb-4 text-sm text-amber-300">
               {skipped} row(s) skipped (no price found in document).

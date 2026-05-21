@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import multer from 'multer'
 import {
-  aiMatchProducts,
+  matchRowToExisting,
   deactivateMissingForSupplier,
   detectFileType,
   extractProductsFromPdf,
@@ -220,16 +220,8 @@ export function createCatalogRouter(supabase, openai) {
         .select('id, name, sku, supplier_id, unit_price')
         .eq('is_active', true)
 
-      const decisions = await aiMatchProducts(openai, existing ?? [], rows)
-
       for (const row of rows) {
         if (row.action === 'skip') continue
-
-        const decision = decisions.find((d) => d.row_id === row.id)
-        const action = decision?.action ?? row.action ?? 'create'
-        const matchId = decision?.match_product_id ?? row.match_product_id ?? null
-
-        if (action === 'skip') continue
 
         const supplierId = await resolveSupplier(
           supabase,
@@ -237,10 +229,29 @@ export function createCatalogRouter(supabase, openai) {
         )
         if (!supplierId) continue
 
+        const { action, match_product_id: matchId } = matchRowToExisting(
+          existing ?? [],
+          row,
+          supplierId
+        )
+        if (action === 'skip') continue
+
         supplierIdsUsed.add(supplierId)
 
-        const productId = await upsertProduct(supabase, row, supplierId, matchId, action)
+        const productId = await upsertProduct(
+          supabase,
+          row,
+          supplierId,
+          matchId,
+          action === 'update' && matchId ? 'update' : 'create'
+        )
         if (productId) committedProductIds.push(productId)
+      }
+
+      if (!committedProductIds.length) {
+        return res.status(422).json({
+          error: 'No products were saved. Check supplier names and try again.'
+        })
       }
 
       let deactivated = 0

@@ -122,12 +122,18 @@ export const api = {
       skipped_no_price: number
     }
   },
-  commitCatalog: (uploadId: string) =>
-    request<{
+  commitCatalog: async (uploadId: string) => {
+    const res = await fetch(`${API_URL}/api/catalog/upload/${uploadId}/commit`, {
+      method: 'POST'
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error ?? res.statusText)
+    return data as {
       created_or_updated: number
       deactivated: number
       products: CommittedProduct[]
-    }>(`/api/catalog/upload/${uploadId}/commit`, { method: 'POST' }),
+    }
+  },
   getSite: (id: string) =>
     request<{
       site: Site
