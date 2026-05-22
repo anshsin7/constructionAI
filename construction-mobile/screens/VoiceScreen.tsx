@@ -90,46 +90,41 @@ export function VoiceScreen({ navigation, route }: Props) {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <Text style={styles.title}>Hold to record</Text>
-      <Text style={styles.subtitle}>
-        Describe what you need on site{'\n'}
-        (Requires a real device — simulator has no mic)
-      </Text>
-
       {!recording ? (
         <Pressable style={styles.micButton} onPress={startRecording} disabled={loading}>
-          <Text style={styles.micEmoji}>🎤</Text>
-          <Text style={styles.micLabel}>Tap to Record</Text>
+          <Text style={styles.micLabel}>TAP TO{'\n'}RECORD</Text>
         </Pressable>
       ) : (
         <Pressable style={[styles.micButton, styles.recording]} onPress={stopAndClassify}>
-          <Text style={styles.micEmoji}>⏹</Text>
-          <Text style={styles.micLabel}>Tap to Stop & Search</Text>
+          <Text style={styles.micLabel}>TAP TO{'\n'}STOP</Text>
         </Pressable>
       )}
 
-      {loading && <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 24 }} />}
+      {loading && (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>PROCESSING...</Text>
+        </View>
+      )}
       {error && <Text style={styles.error}>{error}</Text>}
     </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg, padding: 24, alignItems: 'center' },
-  title: { fontSize: 26, fontWeight: '800', color: colors.text },
-  subtitle: { fontSize: 16, color: colors.muted, marginTop: 8, marginBottom: 40 },
+  safe: { flex: 1, backgroundColor: colors.bg, padding: 24, alignItems: 'center', justifyContent: 'center' },
   micButton: {
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: colors.card,
-    borderWidth: 3,
+    width: 260,
+    height: 260,
+    borderWidth: 6,
     borderColor: colors.primary,
+    backgroundColor: colors.card,
     alignItems: 'center',
     justifyContent: 'center'
   },
-  recording: { borderColor: colors.danger, backgroundColor: '#450a0a' },
-  micEmoji: { fontSize: 48 },
-  micLabel: { fontSize: 16, fontWeight: '700', color: colors.text, marginTop: 8 },
-  error: { color: colors.danger, marginTop: 24, fontSize: 16, textAlign: 'center' }
+  recording: { borderColor: colors.danger, backgroundColor: '#330000' },
+  micLabel: { fontSize: 32, fontWeight: '900', color: colors.text, textAlign: 'center', letterSpacing: 1 },
+  loadingRow: { marginTop: 32, alignItems: 'center', gap: 12 },
+  loadingText: { color: colors.text, fontSize: 20, fontWeight: '900' },
+  error: { color: colors.danger, marginTop: 24, fontSize: 20, fontWeight: '700', textAlign: 'center' }
 })

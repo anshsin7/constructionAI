@@ -26,13 +26,10 @@ export function UrgencyPickerModal({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <Pressable style={styles.backdrop} onPress={loading ? undefined : onCancel}>
         <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
-          <Text style={styles.title}>How urgent is this?</Text>
+          <Text style={styles.title}>HOW URGENT?</Text>
           <Text style={styles.product}>
             {quantity}× {productName}
             {lineTotalLabel ? ` · ${lineTotalLabel}` : ''}
-          </Text>
-          <Text style={styles.hint}>
-            Choose whether this goes out immediately or waits for sourcing’s daily batch.
           </Text>
 
           <Pressable
@@ -41,12 +38,9 @@ export function UrgencyPickerModal({
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color="#000" />
+              <ActivityIndicator color="#000" size="large" />
             ) : (
-              <>
-                <Text style={styles.bigBtnTitle}>Urgent</Text>
-                <Text style={styles.bigBtnSub}>Approval or straight to supplier</Text>
-              </>
+              <Text style={styles.bigBtnTitle}>URGENT</Text>
             )}
           </Pressable>
 
@@ -56,17 +50,14 @@ export function UrgencyPickerModal({
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color="#000" />
+              <ActivityIndicator color="#000" size="large" />
             ) : (
-              <>
-                <Text style={[styles.bigBtnTitle, styles.batchBtnTitle]}>Not urgent</Text>
-                <Text style={[styles.bigBtnSub, styles.batchBtnSub]}>Queued for daily batch send</Text>
-              </>
+              <Text style={styles.bigBtnTitle}>NOT URGENT</Text>
             )}
           </Pressable>
 
           <Pressable style={styles.cancelBtn} onPress={onCancel} disabled={loading}>
-            <Text style={styles.cancelText}>Cancel</Text>
+            <Text style={styles.cancelText}>CANCEL</Text>
           </Pressable>
         </Pressable>
       </Pressable>
@@ -77,46 +68,36 @@ export function UrgencyPickerModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.72)',
+    backgroundColor: 'rgba(0,0,0,0.85)',
     justifyContent: 'flex-end',
-    padding: 20,
-    paddingBottom: 36
+    padding: 16,
+    paddingBottom: 32
   },
   sheet: {
     backgroundColor: colors.card,
-    borderRadius: 20,
     padding: 24,
-    borderWidth: 1,
+    borderWidth: 3,
     borderColor: colors.border
   },
   title: {
-    fontSize: 24,
-    fontWeight: '800',
+    fontSize: 28,
+    fontWeight: '900',
     color: colors.text,
-    textAlign: 'center'
+    textAlign: 'center',
+    letterSpacing: 1
   },
   product: {
-    fontSize: 17,
+    fontSize: 20,
     color: colors.primary,
     textAlign: 'center',
-    marginTop: 10,
-    fontWeight: '700'
-  },
-  hint: {
-    fontSize: 15,
-    color: colors.muted,
-    textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 20,
-    lineHeight: 22
+    marginTop: 12,
+    fontWeight: '900'
   },
   bigBtn: {
-    borderRadius: 14,
-    paddingVertical: 22,
+    paddingVertical: 28,
     paddingHorizontal: 20,
-    marginBottom: 12,
+    marginTop: 16,
     alignItems: 'center',
-    minHeight: 88,
     justifyContent: 'center'
   },
   urgentBtn: {
@@ -125,28 +106,23 @@ const styles = StyleSheet.create({
   batchBtn: {
     backgroundColor: colors.success
   },
-  btnDisabled: { opacity: 0.7 },
+  btnDisabled: { opacity: 0.5 },
   bigBtnTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#000'
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#000',
+    letterSpacing: 1
   },
-  bigBtnSub: {
-    fontSize: 14,
-    color: 'rgba(0,0,0,0.65)',
-    marginTop: 4,
-    fontWeight: '600'
-  },
-  batchBtnTitle: { color: '#000' },
-  batchBtnSub: { color: 'rgba(0,0,0,0.65)' },
   cancelBtn: {
-    marginTop: 4,
-    paddingVertical: 14,
-    alignItems: 'center'
+    marginTop: 16,
+    paddingVertical: 18,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.muted
   },
   cancelText: {
-    fontSize: 17,
+    fontSize: 20,
     color: colors.muted,
-    fontWeight: '600'
+    fontWeight: '900'
   }
 })

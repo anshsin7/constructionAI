@@ -4,12 +4,10 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Keyboard,
   Pressable,
   RefreshControl,
   StyleSheet,
   Text,
-  TextInput,
   View
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -25,7 +23,6 @@ export function ApprovalsScreen({ route }: Props) {
   const { user } = route.params
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
-  const [note, setNote] = useState('')
   const [actingId, setActingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -57,17 +54,16 @@ export function ApprovalsScreen({ route }: Props) {
     setError(null)
     try {
       if (action === 'approve') {
-        const { order, po } = await approveOrder(id, user.id, note || undefined)
+        const { order, po } = await approveOrder(id, user.id)
         const msg = po?.email_sent
           ? `PO emailed to supplier.\nStatus: ${order.status}`
           : po?.po_pdf_url
-            ? `PO saved (status: ${order.status}).\nEmail skipped — check backend terminal for confirm link.`
-            : `Approved. PO may still be processing.\nStatus: ${order.status}`
+            ? `PO saved (status: ${order.status}).\nEmail skipped.`
+            : `Approved.\nStatus: ${order.status}`
         Alert.alert('Approved', msg)
       } else {
-        await rejectOrder(id, user.id, note || undefined)
+        await rejectOrder(id, user.id)
       }
-      setNote('')
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Action failed')
@@ -78,23 +74,10 @@ export function ApprovalsScreen({ route }: Props) {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <Text style={styles.title}>Pending Approvals</Text>
+      <Text style={styles.title}>APPROVALS</Text>
       {error && <Text style={styles.error}>{error}</Text>}
-      <TextInput
-        style={styles.noteInput}
-        placeholder="Optional note for all actions"
-        placeholderTextColor={colors.muted}
-        value={note}
-        onChangeText={setNote}
-        returnKeyType="done"
-        blurOnSubmit
-        onSubmitEditing={Keyboard.dismiss}
-      />
-      <Pressable onPress={Keyboard.dismiss} style={styles.dismissNote}>
-        <Text style={styles.dismissNoteText}>Dismiss keyboard</Text>
-      </Pressable>
       {loading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+        <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 40 }} />
       ) : (
         <FlatList
           data={orders}
@@ -103,12 +86,12 @@ export function ApprovalsScreen({ route }: Props) {
           keyboardShouldPersistTaps="handled"
           refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.primary} />}
           contentContainerStyle={styles.list}
-          ListEmptyComponent={<Text style={styles.empty}>No pending requests.</Text>}
+          ListEmptyComponent={<Text style={styles.empty}>NO PENDING REQUESTS</Text>}
           renderItem={({ item }) => (
             <View style={styles.card}>
               <Text style={styles.productName}>{item.products?.name ?? 'Product'}</Text>
               <Text style={styles.meta}>
-                Qty {item.quantity} · CHF {item.total_price}
+                QTY {item.quantity} · CHF {item.total_price}
               </Text>
               <View style={styles.actions}>
                 <Pressable
@@ -116,14 +99,18 @@ export function ApprovalsScreen({ route }: Props) {
                   onPress={() => act(item.id, 'approve')}
                   disabled={!!actingId}
                 >
-                  <Text style={styles.actionText}>Approve</Text>
+                  {actingId === item.id ? (
+                    <ActivityIndicator color="#000" />
+                  ) : (
+                    <Text style={styles.actionText}>APPROVE</Text>
+                  )}
                 </Pressable>
                 <Pressable
                   style={[styles.reject, actingId === item.id && styles.disabled]}
                   onPress={() => act(item.id, 'reject')}
                   disabled={!!actingId}
                 >
-                  <Text style={styles.actionText}>Reject</Text>
+                  <Text style={styles.rejectText}>REJECT</Text>
                 </Pressable>
               </View>
             </View>
@@ -136,47 +123,33 @@ export function ApprovalsScreen({ route }: Props) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
-  title: { fontSize: 26, fontWeight: '800', color: colors.text, padding: 20, paddingBottom: 8 },
-  noteInput: {
-    marginHorizontal: 20,
-    backgroundColor: colors.card,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 16,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.border
-  },
-  dismissNote: { alignItems: 'center', paddingBottom: 8 },
-  dismissNoteText: { color: colors.muted, fontSize: 14 },
+  title: { fontSize: 28, fontWeight: '900', color: colors.text, padding: 20, paddingBottom: 12, letterSpacing: 1 },
   list: { padding: 16, paddingBottom: 32 },
   card: {
     backgroundColor: colors.card,
-    borderRadius: 14,
-    padding: 18,
-    marginBottom: 12,
-    borderWidth: 1,
+    padding: 20,
+    marginBottom: 14,
+    borderWidth: 3,
     borderColor: colors.border
   },
-  productName: { fontSize: 20, fontWeight: '700', color: colors.text },
-  meta: { fontSize: 15, color: colors.muted, marginTop: 4 },
-  actions: { flexDirection: 'row', gap: 12, marginTop: 14 },
+  productName: { fontSize: 22, fontWeight: '900', color: colors.text },
+  meta: { fontSize: 18, color: colors.muted, marginTop: 6, fontWeight: '700' },
+  actions: { flexDirection: 'row', gap: 14, marginTop: 18 },
   approve: {
     flex: 1,
     backgroundColor: colors.success,
-    paddingVertical: 16,
-    borderRadius: 10,
+    paddingVertical: 20,
     alignItems: 'center'
   },
   reject: {
     flex: 1,
     backgroundColor: colors.danger,
-    paddingVertical: 16,
-    borderRadius: 10,
+    paddingVertical: 20,
     alignItems: 'center'
   },
-  actionText: { fontWeight: '800', fontSize: 16, color: '#fff' },
+  actionText: { fontWeight: '900', fontSize: 18, color: '#000' },
+  rejectText: { fontWeight: '900', fontSize: 18, color: '#FFF' },
   disabled: { opacity: 0.5 },
-  empty: { color: colors.muted, textAlign: 'center', marginTop: 40 },
-  error: { color: colors.danger, paddingHorizontal: 20, paddingBottom: 8, fontSize: 15 }
+  empty: { color: colors.muted, textAlign: 'center', marginTop: 40, fontSize: 20, fontWeight: '900' },
+  error: { color: colors.danger, paddingHorizontal: 20, paddingBottom: 8, fontSize: 18, fontWeight: '700' }
 })

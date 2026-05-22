@@ -22,7 +22,6 @@ function buildSearchBlob(p) {
   return [
     p.name,
     p.description,
-    p.category,
     p.size_spec,
     p.search_text,
     kw,
@@ -47,33 +46,28 @@ export function rankProducts(products, classification, limit = 50) {
       .join(' ')
   )
 
-  const category = classification.category
-
   const scored = products
     .filter((p) => p.is_active !== false)
     .map((p) => {
       const blob = buildSearchBlob(p)
       let score = 0
 
-      if (p.category === category) score += 40
-      else if (category && category !== 'Other') score += 5
-
-      score += overlapScore(queryTokens, blob) * 35
+      score += overlapScore(queryTokens, blob) * 60
 
       if (classification.matched_product_name) {
         const nameLower = p.name.toLowerCase()
         const matchLower = classification.matched_product_name.toLowerCase()
-        if (nameLower === matchLower) score += 30
-        else if (nameLower.includes(matchLower) || matchLower.includes(nameLower)) score += 18
+        if (nameLower === matchLower) score += 40
+        else if (nameLower.includes(matchLower) || matchLower.includes(nameLower)) score += 25
       }
 
       if (classification.size_spec && p.size_spec) {
         const spec = classification.size_spec.toLowerCase()
         const ps = p.size_spec.toLowerCase()
-        if (ps.includes(spec) || spec.includes(ps)) score += 15
+        if (ps.includes(spec) || spec.includes(ps)) score += 20
       }
 
-      score += Math.min(25, (p.popularity_score ?? 0) * 0.5)
+      score += Math.min(15, (p.popularity_score ?? 0) * 0.3)
 
       return { ...p, _score: score }
     })

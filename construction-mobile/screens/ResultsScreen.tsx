@@ -44,9 +44,9 @@ function ProductRow({
       <Text style={styles.productName}>{product.name}</Text>
       <Text style={styles.meta}>
         {showPrices && product.unit_price != null
-          ? `CHF ${product.unit_price} / ${product.unit} · ${supplier}`
-          : `${product.unit} · ${supplier}`}
-        {product.relevance_percent != null ? ` · ${product.relevance_percent}% match` : ''}
+          ? `CHF ${product.unit_price} / ${product.unit}`
+          : product.unit}
+        {' · '}{supplier}
       </Text>
       <View style={styles.qtyRow}>
         <Pressable style={styles.qtyBtn} onPress={() => onChangeQty(Math.max(1, quantity - 1))}>
@@ -66,7 +66,7 @@ function ProductRow({
           <ActivityIndicator color="#000" />
         ) : (
           <Text style={styles.orderBtnText}>
-            {lineTotal != null ? `Order · CHF ${lineTotal.toFixed(2)}` : 'Order'}
+            {lineTotal != null ? `ORDER · CHF ${lineTotal.toFixed(2)}` : 'ORDER'}
           </Text>
         )}
       </Pressable>
@@ -127,16 +127,11 @@ export function ResultsScreen({ navigation, route }: Props) {
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
         <Text style={styles.category}>{classification.category}</Text>
-        <Text style={styles.reasoning}>{classification.reasoning}</Text>
-        {classification.matched_product_name && (
-          <Text style={styles.match}>Match: {classification.matched_product_name}</Text>
-        )}
       </View>
 
       {products.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>No matching products yet. Ask procurement to upload a catalog.</Text>
-          <Text style={styles.emptyHint}>Run supabase/seed.sql in your Supabase project.</Text>
+          <Text style={styles.emptyText}>NO PRODUCTS FOUND</Text>
         </View>
       ) : (
         <FlatList
@@ -173,45 +168,39 @@ export function ResultsScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
-  header: { padding: 20, paddingBottom: 8 },
-  category: { fontSize: 24, fontWeight: '800', color: colors.primary },
-  reasoning: { fontSize: 15, color: colors.muted, marginTop: 6 },
-  match: { fontSize: 15, color: colors.text, marginTop: 4 },
-  list: { padding: 16, gap: 12, paddingBottom: 32 },
+  header: { padding: 20, paddingBottom: 12 },
+  category: { fontSize: 28, fontWeight: '900', color: colors.primary, letterSpacing: 1 },
+  list: { padding: 16, gap: 16, paddingBottom: 32 },
   card: {
     backgroundColor: colors.card,
-    borderRadius: 14,
-    padding: 18,
+    padding: 20,
     marginBottom: 12,
-    borderWidth: 1,
+    borderWidth: 3,
     borderColor: colors.border
   },
-  productName: { fontSize: 22, fontWeight: '800', color: colors.text },
-  meta: { fontSize: 16, color: colors.muted, marginTop: 6 },
-  qtyRow: { flexDirection: 'row', alignItems: 'center', marginTop: 16, gap: 16 },
+  productName: { fontSize: 24, fontWeight: '900', color: colors.text },
+  meta: { fontSize: 18, color: colors.muted, marginTop: 8, fontWeight: '700' },
+  qtyRow: { flexDirection: 'row', alignItems: 'center', marginTop: 20, gap: 20 },
   qtyBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 12,
+    width: 60,
+    height: 60,
     backgroundColor: colors.bg,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.border
+    borderWidth: 3,
+    borderColor: colors.text
   },
-  qtyBtnText: { fontSize: 28, fontWeight: '700', color: colors.text },
-  qtyValue: { fontSize: 24, fontWeight: '800', color: colors.text, minWidth: 40, textAlign: 'center' },
+  qtyBtnText: { fontSize: 32, fontWeight: '900', color: colors.text },
+  qtyValue: { fontSize: 28, fontWeight: '900', color: colors.text, minWidth: 50, textAlign: 'center' },
   orderBtn: {
-    marginTop: 16,
+    marginTop: 20,
     backgroundColor: colors.success,
-    paddingVertical: 18,
-    borderRadius: 12,
+    paddingVertical: 22,
     alignItems: 'center'
   },
-  orderBtnDisabled: { opacity: 0.6 },
-  orderBtnText: { fontSize: 18, fontWeight: '800', color: '#000' },
+  orderBtnDisabled: { opacity: 0.5 },
+  orderBtnText: { fontSize: 20, fontWeight: '900', color: '#000', letterSpacing: 1 },
   empty: { flex: 1, justifyContent: 'center', padding: 32 },
-  emptyText: { fontSize: 18, color: colors.text, textAlign: 'center' },
-  emptyHint: { fontSize: 14, color: colors.muted, textAlign: 'center', marginTop: 8 },
-  error: { color: colors.danger, textAlign: 'center', padding: 12 }
+  emptyText: { fontSize: 22, color: colors.text, textAlign: 'center', fontWeight: '900' },
+  error: { color: colors.danger, textAlign: 'center', padding: 16, fontSize: 18, fontWeight: '700' }
 })

@@ -15,32 +15,39 @@ export function OrderConfirmScreen({ navigation, route }: Props) {
     showPricesForUser(user) && order.total_price != null ? ` (CHF ${order.total_price})` : ''
   const batchHint = batchSendTime ? ` around ${batchSendTime}` : ''
 
+  const statusText = queued
+    ? 'QUEUED'
+    : needsApproval
+      ? 'AWAITING APPROVAL'
+      : poSent
+        ? 'PO SENT'
+        : 'CONFIRMED'
+
+  const statusColor = queued
+    ? colors.primary
+    : needsApproval
+      ? colors.primary
+      : colors.success
+
+  const bodyText = queued
+    ? `${quantity}× ${name}${priceBit} queued for batch send${batchHint}.`
+    : needsApproval
+      ? `${quantity}× ${name}${priceBit} pending approval.`
+      : poSent
+        ? `PO sent to supplier. Waiting for confirmation.`
+        : `${quantity}× ${name}${priceBit} approved.`
+
   return (
     <SafeAreaView style={styles.safe}>
-      <Text style={styles.emoji}>{queued ? '📦' : needsApproval ? '⏳' : poSent ? '📧' : '✅'}</Text>
-      <Text style={styles.title}>
-        {queued
-          ? 'Queued for batch'
-          : needsApproval
-            ? 'Awaiting Approval'
-            : poSent
-              ? 'PO Sent'
-              : 'Order Confirmed'}
-      </Text>
-      <Text style={styles.body}>
-        {queued
-          ? `Your order for ${quantity}× ${name}${priceBit} is queued. Sourcing will send it with other non-urgent orders${batchHint} (merged per supplier).`
-          : needsApproval
-            ? `Your order for ${quantity}× ${name}${priceBit} is pending Sara's approval.`
-            : poSent
-              ? `PO emailed to the supplier. Waiting for supplier confirmation.`
-              : `Your order for ${quantity}× ${name}${priceBit} was approved. PO is being generated.`}
-      </Text>
+      <View style={[styles.statusBanner, { borderColor: statusColor }]}>
+        <Text style={[styles.statusText, { color: statusColor }]}>{statusText}</Text>
+      </View>
+      <Text style={styles.body}>{bodyText}</Text>
       <Pressable style={styles.button} onPress={() => navigation.popToTop()}>
-        <Text style={styles.buttonText}>Back to Home</Text>
+        <Text style={styles.buttonText}>BACK TO HOME</Text>
       </Pressable>
-      <Pressable onPress={() => navigation.navigate('MyOrders', { user: route.params.user })}>
-        <Text style={styles.link}>View My Orders</Text>
+      <Pressable style={styles.linkBtn} onPress={() => navigation.navigate('MyOrders', { user: route.params.user })}>
+        <Text style={styles.linkText}>VIEW MY ORDERS</Text>
       </Pressable>
     </SafeAreaView>
   )
@@ -50,22 +57,27 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.bg,
-    padding: 32,
+    padding: 24,
     alignItems: 'center',
     justifyContent: 'center'
   },
-  emoji: { fontSize: 64, marginBottom: 16 },
-  title: { fontSize: 28, fontWeight: '800', color: colors.text, textAlign: 'center' },
-  body: { fontSize: 18, color: colors.muted, textAlign: 'center', marginTop: 16, lineHeight: 26 },
-  button: {
-    marginTop: 32,
-    backgroundColor: colors.primary,
-    paddingVertical: 18,
+  statusBanner: {
+    borderWidth: 4,
+    paddingVertical: 20,
     paddingHorizontal: 32,
-    borderRadius: 12,
+    marginBottom: 24
+  },
+  statusText: { fontSize: 32, fontWeight: '900', letterSpacing: 2 },
+  body: { fontSize: 20, color: colors.text, textAlign: 'center', lineHeight: 30, fontWeight: '700' },
+  button: {
+    marginTop: 40,
+    backgroundColor: colors.primary,
+    paddingVertical: 22,
+    paddingHorizontal: 40,
     width: '100%',
     alignItems: 'center'
   },
-  buttonText: { fontSize: 18, fontWeight: '800', color: '#000' },
-  link: { marginTop: 20, fontSize: 17, color: colors.primary, fontWeight: '600' }
+  buttonText: { fontSize: 22, fontWeight: '900', color: '#000', letterSpacing: 1 },
+  linkBtn: { marginTop: 20, paddingVertical: 16 },
+  linkText: { fontSize: 18, color: colors.muted, fontWeight: '900' }
 })
