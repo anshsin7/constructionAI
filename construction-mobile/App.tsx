@@ -20,7 +20,7 @@ const navTheme = {
   colors: {
     ...DarkTheme.colors,
     background: colors.bg,
-    card: colors.card,
+    card: colors.bg,
     text: colors.text,
     border: colors.border,
     primary: colors.primary
@@ -35,9 +35,10 @@ export default function App() {
       <StatusBar style="light" />
       <Stack.Navigator
         screenOptions={{
-          headerStyle: { backgroundColor: colors.card },
+          headerStyle: { backgroundColor: colors.bg },
           headerTintColor: colors.text,
-          headerTitleStyle: { fontWeight: '700' }
+          headerTitleStyle: { fontWeight: '900', fontSize: 20 },
+          headerShadowVisible: false
         }}
       >
         <Stack.Screen name="Home" options={{ headerShown: false }}>
@@ -45,16 +46,16 @@ export default function App() {
             <HomeScreen {...props} user={user} onSwitchUser={setUser} />
           )}
         </Stack.Screen>
-        <Stack.Screen name="TextInput" component={TextInputScreen} options={{ title: 'Text' }} />
-        <Stack.Screen name="Voice" component={VoiceScreen} options={{ title: 'Voice' }} />
-        <Stack.Screen name="Results" component={ResultsScreen} options={{ title: 'Products' }} />
+        <Stack.Screen name="TextInput" component={TextInputScreen} options={{ title: 'TEXT' }} />
+        <Stack.Screen name="Voice" component={VoiceScreen} options={{ title: 'VOICE' }} />
+        <Stack.Screen name="Results" component={ResultsScreen} options={{ title: 'PRODUCTS' }} />
         <Stack.Screen
           name="OrderConfirm"
           component={OrderConfirmScreen}
-          options={{ title: 'Order', headerBackVisible: false }}
+          options={{ title: 'ORDER', headerBackVisible: false }}
         />
-        <Stack.Screen name="MyOrders" component={MyOrdersScreen} />
-        <Stack.Screen name="Approvals" component={ApprovalsScreen} />
+        <Stack.Screen name="MyOrders" component={MyOrdersScreen} options={{ title: 'ORDERS' }} />
+        <Stack.Screen name="Approvals" component={ApprovalsScreen} options={{ title: 'APPROVALS' }} />
       </Stack.Navigator>
     </NavigationContainer>
   )

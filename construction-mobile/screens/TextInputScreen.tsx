@@ -46,12 +46,11 @@ export function TextInputScreen({ navigation, route }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <KeyboardDismissView>
-        <Text style={styles.title}>What do you need?</Text>
-        <Text style={styles.hint}>Tap outside the box or scroll to hide the keyboard.</Text>
+        <Text style={styles.title}>WHAT DO YOU NEED?</Text>
         <TextInput
           style={styles.input}
-          placeholder="e.g. I need screws for concrete"
-          placeholderTextColor={colors.muted}
+          placeholder="e.g. screws for concrete"
+          placeholderTextColor={colors.border}
           value={text}
           onChangeText={setText}
           multiline
@@ -69,11 +68,8 @@ export function TextInputScreen({ navigation, route }: Props) {
           {loading ? (
             <ActivityIndicator color="#000" />
           ) : (
-            <Text style={styles.buttonText}>Find Products</Text>
+            <Text style={styles.buttonText}>FIND PRODUCTS</Text>
           )}
-        </Pressable>
-        <Pressable style={styles.dismissBtn} onPress={Keyboard.dismiss}>
-          <Text style={styles.dismissText}>Dismiss keyboard</Text>
         </Pressable>
       </KeyboardDismissView>
     </SafeAreaView>
@@ -82,29 +78,24 @@ export function TextInputScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg, paddingTop: 8 },
-  title: { fontSize: 26, fontWeight: '800', color: colors.text, marginBottom: 8 },
-  hint: { fontSize: 14, color: colors.muted, marginBottom: 12 },
+  title: { fontSize: 28, fontWeight: '900', color: colors.text, marginBottom: 16, letterSpacing: 1 },
   input: {
-    minHeight: 120,
+    minHeight: 140,
     backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 20,
+    padding: 20,
+    fontSize: 22,
     color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 3,
+    borderColor: colors.text,
     textAlignVertical: 'top'
   },
-  error: { color: colors.danger, marginTop: 12, fontSize: 16 },
+  error: { color: colors.danger, marginTop: 16, fontSize: 18, fontWeight: '700' },
   button: {
-    marginTop: 16,
+    marginTop: 20,
     backgroundColor: colors.primary,
-    paddingVertical: 20,
-    borderRadius: 12,
+    paddingVertical: 24,
     alignItems: 'center'
   },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { fontSize: 20, fontWeight: '800', color: '#000' },
-  dismissBtn: { marginTop: 12, alignItems: 'center', padding: 12 },
-  dismissText: { color: colors.muted, fontSize: 16, fontWeight: '600' }
+  buttonDisabled: { opacity: 0.5 },
+  buttonText: { fontSize: 22, fontWeight: '900', color: '#000', letterSpacing: 1 }
 })
