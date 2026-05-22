@@ -13,6 +13,8 @@ export type Product = {
   unit_price?: number
   popularity_score?: number
   suppliers?: { name: string } | null
+  /** Display-only; from AI relevance scoring, not stored in DB */
+  relevance_percent?: number
 }
 
 export type Order = {
