@@ -1,28 +1,40 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { showPricesForUser } from '../lib/roles'
 import { colors } from '../lib/theme'
 import type { RootStackParamList } from '../navigation/types'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'OrderConfirm'>
 
 export function OrderConfirmScreen({ navigation, route }: Props) {
-  const { product, quantity, order, needsApproval } = route.params
+  const { user, product, quantity, order, needsApproval, queued, batchSendTime } = route.params
   const name = order.products?.name ?? product.name
   const poSent = order.status === 'po_sent' || order.status === 'confirmed'
+  const priceBit =
+    showPricesForUser(user) && order.total_price != null ? ` (CHF ${order.total_price})` : ''
+  const batchHint = batchSendTime ? ` around ${batchSendTime}` : ''
 
   return (
     <SafeAreaView style={styles.safe}>
-      <Text style={styles.emoji}>{needsApproval ? '⏳' : poSent ? '📧' : '✅'}</Text>
+      <Text style={styles.emoji}>{queued ? '📦' : needsApproval ? '⏳' : poSent ? '📧' : '✅'}</Text>
       <Text style={styles.title}>
-        {needsApproval ? 'Awaiting Approval' : poSent ? 'PO Sent' : 'Order Confirmed'}
+        {queued
+          ? 'Queued for batch'
+          : needsApproval
+            ? 'Awaiting Approval'
+            : poSent
+              ? 'PO Sent'
+              : 'Order Confirmed'}
       </Text>
       <Text style={styles.body}>
-        {needsApproval
-          ? `Your order for ${quantity}× ${name} (CHF ${order.total_price}) is pending Sara's approval.`
-          : poSent
-            ? `PO emailed to the supplier. Waiting for supplier confirmation.`
-            : `Your order for ${quantity}× ${name} (CHF ${order.total_price}) was approved. PO is being generated.`}
+        {queued
+          ? `Your order for ${quantity}× ${name}${priceBit} is queued. Sourcing will send it with other non-urgent orders${batchHint} (merged per supplier).`
+          : needsApproval
+            ? `Your order for ${quantity}× ${name}${priceBit} is pending Sara's approval.`
+            : poSent
+              ? `PO emailed to the supplier. Waiting for supplier confirmation.`
+              : `Your order for ${quantity}× ${name}${priceBit} was approved. PO is being generated.`}
       </Text>
       <Pressable style={styles.button} onPress={() => navigation.popToTop()}>
         <Text style={styles.buttonText}>Back to Home</Text>

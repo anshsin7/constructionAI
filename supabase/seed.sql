@@ -11,9 +11,20 @@ alter table product_aliases disable row level security;
 alter table catalog_uploads disable row level security;
 alter table catalog_upload_rows disable row level security;
 
-insert into sites (id, name, location, total_budget, spent) values
-  ('11111111-1111-1111-1111-111111111101', 'Zürich HB Tower', 'Zürich', 50000, 1200)
-on conflict (id) do nothing;
+insert into sites (id, name, location, delivery_address, batch_send_time, total_budget, spent) values
+  (
+    '11111111-1111-1111-1111-111111111101',
+    'Zürich HB Tower',
+    'Zürich',
+    'Pestalozzistrasse 11, 8032 Zürich Schweiz',
+    '17:00:00',
+    50000,
+    1200
+  )
+on conflict (id) do update set
+  delivery_address = excluded.delivery_address,
+  location = excluded.location,
+  batch_send_time = excluded.batch_send_time;
 
 -- Sara first (Marco references her as manager)
 insert into users (id, name, email, role, site_id, budget_limit, manager_id) values

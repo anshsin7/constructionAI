@@ -17,8 +17,14 @@ In [supabase.com/dashboard](https://supabase.com/dashboard) → your project →
 | 3 | `supabase/seed.sql` |
 | 4 | `supabase/fix-approvals.sql` — fixes Marco → Sara + disables RLS |
 | 5 | `supabase/catalog-migration.sql` — product catalog upload tables + columns |
+| 6 | `supabase/site-address-migration.sql` — delivery address on sites (used on PO PDFs) |
+| 7 | `supabase/batch-orders-migration.sql` — urgent vs queued batch orders + site send time |
 
 Check **Table Editor** → `products` should have 5 rows, `users` should have Marco, Sara & Procurement.
+
+**Site delivery address:** Fixed in DB (`sites.delivery_address` — see `seed.sql` / `site-address-migration.sql`), printed on supplier POs.
+
+**Batch orders:** Workers choose urgent vs not on order. Non-urgent → `queued` until site `batch_send_time` (web → site detail → Sourcing). Use **Send batch now** for demos. Merged PO per supplier.
 
 **Catalog upload (procurement web):** After migration, open the web dashboard → **Catalog upload** (`/upload`). Upload CSV, XLSX, or PDF (max 15 pages).
 

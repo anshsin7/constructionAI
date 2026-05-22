@@ -9,7 +9,9 @@ import {
   View
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { UrgencyPickerModal } from '../components/UrgencyPickerModal'
 import { createOrder } from '../lib/api'
+import { showPricesForUser } from '../lib/roles'
 import { colors } from '../lib/theme'
 import type { Product } from '../lib/types'
 import type { RootStackParamList } from '../navigation/types'
@@ -21,22 +23,29 @@ function ProductRow({
   quantity,
   onChangeQty,
   onOrder,
-  ordering
+  ordering,
+  showPrices
 }: {
   product: Product
   quantity: number
   onChangeQty: (n: number) => void
   onOrder: () => void
   ordering: boolean
+  showPrices: boolean
 }) {
   const supplier = product.suppliers?.name ?? 'Supplier'
-  const lineTotal = Number(product.unit_price) * quantity
+  const lineTotal =
+    showPrices && product.unit_price != null
+      ? Number(product.unit_price) * quantity
+      : null
 
   return (
     <View style={styles.card}>
       <Text style={styles.productName}>{product.name}</Text>
       <Text style={styles.meta}>
-        CHF {product.unit_price} / {product.unit} · {supplier}
+        {showPrices && product.unit_price != null
+          ? `CHF ${product.unit_price} / ${product.unit} · ${supplier}`
+          : `${product.unit} · ${supplier}`}
       </Text>
       <View style={styles.qtyRow}>
         <Pressable style={styles.qtyBtn} onPress={() => onChangeQty(Math.max(1, quantity - 1))}>
@@ -55,7 +64,9 @@ function ProductRow({
         {ordering ? (
           <ActivityIndicator color="#000" />
         ) : (
-          <Text style={styles.orderBtnText}>Order · CHF {lineTotal.toFixed(2)}</Text>
+          <Text style={styles.orderBtnText}>
+            {lineTotal != null ? `Order · CHF ${lineTotal.toFixed(2)}` : 'Order'}
+          </Text>
         )}
       </Pressable>
     </View>
@@ -64,24 +75,27 @@ function ProductRow({
 
 export function ResultsScreen({ navigation, route }: Props) {
   const { user, inputMethod, classification, products } = route.params
+  const showPrices = showPricesForUser(user)
   const [quantities, setQuantities] = useState<Record<string, number>>({})
   const [orderingId, setOrderingId] = useState<string | null>(null)
+  const [pendingProduct, setPendingProduct] = useState<Product | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   function getQty(id: string) {
     return quantities[id] ?? 1
   }
 
-  async function placeOrder(product: Product) {
+  async function submitOrder(product: Product, isUrgent: boolean) {
     setOrderingId(product.id)
     setError(null)
     try {
-      const { order, needs_approval } = await createOrder({
+      const result = await createOrder({
         requestor_id: user.id,
         product_id: product.id,
         quantity: getQty(product.id),
         input_method: inputMethod,
-        ai_classification: classification
+        ai_classification: classification,
+        is_urgent: isUrgent
       })
       navigation.replace('OrderConfirm', {
         user,
@@ -89,15 +103,24 @@ export function ResultsScreen({ navigation, route }: Props) {
         classification,
         product,
         quantity: getQty(product.id),
-        order,
-        needsApproval: needs_approval
+        order: result.order,
+        needsApproval: result.needs_approval,
+        queued: result.queued ?? false,
+        batchSendTime: result.batch_send_time ?? null
       })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Order failed')
+      setPendingProduct(product)
     } finally {
       setOrderingId(null)
     }
   }
+
+  const pendingQty = pendingProduct ? getQty(pendingProduct.id) : 0
+  const pendingLineTotal =
+    pendingProduct && showPrices && pendingProduct.unit_price != null
+      ? `CHF ${(Number(pendingProduct.unit_price) * pendingQty).toFixed(2)}`
+      : null
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -124,13 +147,25 @@ export function ResultsScreen({ navigation, route }: Props) {
               product={item}
               quantity={getQty(item.id)}
               onChangeQty={(n) => setQuantities((q) => ({ ...q, [item.id]: n }))}
-              onOrder={() => placeOrder(item)}
+              onOrder={() => setPendingProduct(item)}
               ordering={orderingId === item.id}
+              showPrices={showPrices}
             />
           )}
         />
       )}
       {error && <Text style={styles.error}>{error}</Text>}
+
+      <UrgencyPickerModal
+        visible={pendingProduct != null}
+        productName={pendingProduct?.name ?? ''}
+        quantity={pendingQty}
+        lineTotalLabel={pendingLineTotal}
+        loading={pendingProduct != null && orderingId === pendingProduct.id}
+        onUrgent={() => pendingProduct && submitOrder(pendingProduct, true)}
+        onBatch={() => pendingProduct && submitOrder(pendingProduct, false)}
+        onCancel={() => !orderingId && setPendingProduct(null)}
+      />
     </SafeAreaView>
   )
 }

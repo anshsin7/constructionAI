@@ -8,6 +8,7 @@ import { CHART_COLORS, formatChf, statusLabel, tooltipStyle } from '../lib/chart
 const STATUSES = [
   'all',
   'pending_approval',
+  'queued',
   'approved',
   'po_sent',
   'confirmed',

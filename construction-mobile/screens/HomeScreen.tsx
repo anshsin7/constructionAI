@@ -27,7 +27,7 @@ export function HomeScreen({ navigation, user, onSwitchUser }: Props) {
   async function pickImage(base64: string) {
     setCameraLoading(true)
     try {
-      const { classification, products } = await classify('image', base64)
+      const { classification, products } = await classify('image', base64, user.id)
       navigation.navigate('Results', {
         user,
         inputMethod: 'image',
@@ -83,7 +83,7 @@ export function HomeScreen({ navigation, user, onSwitchUser }: Props) {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
-        <Text style={styles.title}>SiteFlow</Text>
+        <Text style={styles.title}>C-Flow</Text>
         <Text style={styles.subtitle}>
           Logged in as {user.name} ({user.role})
         </Text>

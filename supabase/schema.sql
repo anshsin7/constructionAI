@@ -6,6 +6,9 @@ create table if not exists sites (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   location text,
+  delivery_address text,
+  batch_send_time time,
+  last_batch_sent_date date,
   total_budget numeric not null default 0,
   spent numeric not null default 0,
   created_at timestamptz not null default now()
@@ -98,7 +101,11 @@ create table if not exists orders (
   quantity integer not null check (quantity > 0),
   total_price numeric not null,
   status text not null default 'pending_approval'
-    check (status in ('pending_approval', 'approved', 'rejected', 'po_sent', 'confirmed', 'cancelled')),
+    check (status in (
+      'pending_approval', 'approved', 'rejected', 'po_sent', 'confirmed', 'cancelled', 'queued'
+    )),
+  is_urgent boolean not null default true,
+  batch_po_key text,
   approver_id uuid references users(id),
   approval_note text,
   site_id uuid references sites(id),

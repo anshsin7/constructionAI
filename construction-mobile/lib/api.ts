@@ -22,11 +22,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export async function classify(
   type: 'text' | 'image',
-  data: string
+  data: string,
+  requestor_id: string
 ): Promise<{ classification: Classification; products: Product[] }> {
   return request('/api/classify', {
     method: 'POST',
-    body: JSON.stringify({ type, data })
+    body: JSON.stringify({ type, data, requestor_id })
   })
 }
 
@@ -52,7 +53,14 @@ export async function createOrder(body: {
   quantity: number
   input_method: 'image' | 'voice' | 'text'
   ai_classification?: Classification
-}): Promise<{ order: Order; needs_approval: boolean; po?: PoResult }> {
+  is_urgent: boolean
+}): Promise<{
+  order: Order
+  needs_approval: boolean
+  queued?: boolean
+  batch_send_time?: string | null
+  po?: PoResult
+}> {
   return request('/api/orders', { method: 'POST', body: JSON.stringify(body) })
 }
 

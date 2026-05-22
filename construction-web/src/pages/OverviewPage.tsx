@@ -108,7 +108,11 @@ export function OverviewPage() {
               className="block rounded-2xl border border-slate-800 bg-slate-900 p-6 transition hover:border-amber-500/50 hover:shadow-lg hover:shadow-amber-500/10"
             >
               <h3 className="text-lg font-bold">{site.name}</h3>
-              <p className="text-sm text-slate-400">{site.location}</p>
+              <p className="text-sm text-slate-400">
+                {site.delivery_address
+                  ? site.delivery_address.split('\n')[0]
+                  : site.location}
+              </p>
               <BudgetBar spent={Number(site.spent)} total={Number(site.total_budget)} />
               <p className="mt-4 text-sm text-slate-500">
                 {site.active_orders ?? 0} active order(s)

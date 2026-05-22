@@ -19,6 +19,8 @@ export type RootStackParamList = {
     quantity: number
     order: import('../lib/types').Order
     needsApproval: boolean
+    queued?: boolean
+    batchSendTime?: string | null
   }
   MyOrders: { user: DemoUser }
   Approvals: { user: DemoUser }
