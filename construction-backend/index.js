@@ -6,6 +6,7 @@ import OpenAI, { toFile } from 'openai'
 import { processSiteBatch, startBatchScheduler, normalizeBatchTime } from './lib/batchSend.js'
 import { confirmPurchaseOrder, fulfillPurchaseOrder } from './lib/poPipeline.js'
 import { CATEGORIES } from './lib/categories.js'
+import { filterProductsByAiRelevance } from './lib/productRelevance.js'
 import { rankProducts } from './lib/productSearch.js'
 import { createCatalogRouter } from './routes/catalog.js'
 
@@ -215,7 +216,7 @@ Return ONLY valid JSON, no markdown:
 
     if (error) throw error
 
-    let products = rankProducts(catalog ?? [], classification, 50)
+    let products = await filterProductsByAiRelevance(openai, classification, catalog ?? [])
     if (requestor_id && (await userHidesPrices(requestor_id))) {
       products = stripProductsPrices(products)
     }

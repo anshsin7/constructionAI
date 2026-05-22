@@ -46,6 +46,7 @@ function ProductRow({
         {showPrices && product.unit_price != null
           ? `CHF ${product.unit_price} / ${product.unit} · ${supplier}`
           : `${product.unit} · ${supplier}`}
+        {product.relevance_percent != null ? ` · ${product.relevance_percent}% match` : ''}
       </Text>
       <View style={styles.qtyRow}>
         <Pressable style={styles.qtyBtn} onPress={() => onChangeQty(Math.max(1, quantity - 1))}>
