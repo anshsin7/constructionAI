@@ -74,7 +74,7 @@ export function VoiceScreen({ navigation, route }: Props) {
       if (!base64) throw new Error('Recording file was empty')
 
       const { text } = await transcribe(base64, `recording.${ext}`)
-      const { classification, products } = await classify('text', text)
+      const { classification, products } = await classify('text', text, user.id)
       navigation.replace('Results', {
         user,
         inputMethod: 'voice',

@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useFocusEffect } from '@react-navigation/native'
 import { fetchOrders } from '../lib/api'
+import { showPricesForUser } from '../lib/roles'
 import { API_URL } from '../lib/config'
 import { colors } from '../lib/theme'
 import type { Order } from '../lib/types'
@@ -22,6 +23,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'MyOrders'>
 
 const STATUS_COLORS: Record<string, string> = {
   pending_approval: colors.primary,
+  queued: '#a855f7',
   approved: colors.success,
   rejected: colors.danger,
   po_sent: '#3b82f6',
@@ -30,17 +32,19 @@ const STATUS_COLORS: Record<string, string> = {
 
 function statusLabel(status: string) {
   const labels: Record<string, string> = {
-    pending_approval: 'Awaiting approval',
-    approved: 'Approved',
-    rejected: 'Rejected',
-    po_sent: 'PO sent to supplier',
-    confirmed: 'Confirmed by supplier'
+  pending_approval: 'Awaiting approval',
+  queued: 'Queued for batch send',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  po_sent: 'PO sent to supplier',
+  confirmed: 'Confirmed by supplier'
   }
   return labels[status] ?? status.replace(/_/g, ' ')
 }
 
 export function MyOrdersScreen({ route }: Props) {
   const { user } = route.params
+  const showPrices = showPricesForUser(user)
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -89,7 +93,8 @@ export function MyOrdersScreen({ route }: Props) {
             <View style={styles.card}>
               <Text style={styles.productName}>{item.products?.name ?? 'Product'}</Text>
               <Text style={styles.meta}>
-                Qty {item.quantity} · CHF {item.total_price}
+                Qty {item.quantity}
+                {showPrices && item.total_price != null ? ` · CHF ${item.total_price}` : ''}
               </Text>
               <View
                 style={[

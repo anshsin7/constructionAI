@@ -29,7 +29,7 @@ export function TextInputScreen({ navigation, route }: Props) {
     setLoading(true)
     setError(null)
     try {
-      const { classification, products } = await classify('text', text.trim())
+      const { classification, products } = await classify('text', text.trim(), user.id)
       navigation.replace('Results', {
         user,
         inputMethod: 'text',

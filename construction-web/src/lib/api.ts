@@ -14,6 +14,8 @@ export type Site = {
   id: string
   name: string
   location: string
+  delivery_address?: string | null
+  batch_send_time?: string | null
   total_budget: number
   spent: number
   active_orders?: number
@@ -65,6 +67,7 @@ export type DashboardData = {
     total_spent: number
     order_count: number
     pending_approvals: number
+    queued_orders: number
     catalog_products: number
   }
   spending_by_site: {
@@ -138,9 +141,31 @@ export const api = {
     request<{
       site: Site
       orders: Order[]
+      queued_orders: Order[]
+      queued_count: number
       employees: Employee[]
       category_breakdown: { category: string; amount: number }[]
     }>(`/api/sites/${id}`),
+  sendSiteBatch: (siteId: string) =>
+    request<{
+      site_id: string
+      batches_sent: number
+      orders_sent: number
+      groups: unknown[]
+    }>(`/api/sites/${siteId}/send-batch`, { method: 'POST' }),
+  updateSite: (
+    siteId: string,
+    body: {
+      delivery_address?: string
+      location?: string
+      name?: string
+      batch_send_time?: string
+    }
+  ) =>
+    request<{ site: Site }>(`/api/sites/${siteId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body)
+    }),
   getOrders: (params?: Record<string, string>) => {
     const q = new URLSearchParams(params)
     return request<{ orders: Order[] }>(`/api/orders?${q}`)

@@ -3,6 +3,7 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
 import OpenAI, { toFile } from 'openai'
+import { processSiteBatch, startBatchScheduler, normalizeBatchTime } from './lib/batchSend.js'
 import { confirmPurchaseOrder, fulfillPurchaseOrder } from './lib/poPipeline.js'
 import { CATEGORIES } from './lib/categories.js'
 import { rankProducts } from './lib/productSearch.js'
@@ -24,7 +25,33 @@ function parseAiJson(raw) {
   return JSON.parse(trimmed)
 }
 
-async function enrichOrders(orders) {
+async function userHidesPrices(userId) {
+  if (!userId) return false
+  const { data, error } = await supabase.from('users').select('role').eq('id', userId).single()
+  if (error) return false
+  return data?.role === 'worker'
+}
+
+function stripProductPrice(product) {
+  if (!product) return product
+  const { unit_price: _u, ...rest } = product
+  return rest
+}
+
+function stripOrderPrices(order) {
+  if (!order) return order
+  const { total_price: _t, ...rest } = order
+  return {
+    ...rest,
+    products: order.products ? stripProductPrice(order.products) : order.products
+  }
+}
+
+function stripProductsPrices(products) {
+  return (products ?? []).map(stripProductPrice)
+}
+
+async function enrichOrders(orders, { includePrices = true } = {}) {
   if (!orders?.length) return []
 
   const productIds = [...new Set(orders.map((o) => o.product_id).filter(Boolean))]
@@ -36,17 +63,21 @@ async function enrichOrders(orders) {
   if (error) throw error
 
   const byId = Object.fromEntries((products ?? []).map((p) => [p.id, p]))
-  return orders.map((o) => ({
-    ...o,
-    products: byId[o.product_id]
+  return orders.map((o) => {
+    const base = byId[o.product_id]
       ? {
           name: byId[o.product_id].name,
-          unit_price: byId[o.product_id].unit_price,
           category: byId[o.product_id].category,
-          unit: byId[o.product_id].unit
+          unit: byId[o.product_id].unit,
+          ...(includePrices ? { unit_price: byId[o.product_id].unit_price } : {})
         }
       : null
-  }))
+    const { total_price, ...orderRest } = o
+    return {
+      ...(includePrices ? o : orderRest),
+      products: base
+    }
+  })
 }
 
 async function fetchPendingForApprover(approverId) {
@@ -83,7 +114,7 @@ async function fetchPendingForApprover(approverId) {
   const sorted = [...byId.values()].sort(
     (a, b) => new Date(b.created_at) - new Date(a.created_at)
   )
-  return enrichOrders(sorted)
+  return enrichOrders(sorted, { includePrices: true })
 }
 
 async function tryAutoPo(orderId) {
@@ -109,7 +140,7 @@ app.use('/api/catalog', createCatalogRouter(supabase, openai))
 
 // ── POST /api/classify ──────────────────────────────────────────
 app.post('/api/classify', async (req, res) => {
-  const { type, data } = req.body
+  const { type, data, requestor_id } = req.body
   // type: 'image' | 'text'
   // data: base64 string (image) or plain string (text/voice transcript)
 
@@ -184,7 +215,10 @@ Return ONLY valid JSON, no markdown:
 
     if (error) throw error
 
-    const products = rankProducts(catalog ?? [], classification, 50)
+    let products = rankProducts(catalog ?? [], classification, 50)
+    if (requestor_id && (await userHidesPrices(requestor_id))) {
+      products = stripProductsPrices(products)
+    }
 
     res.json({
       classification,
@@ -226,13 +260,24 @@ app.get('/api/products', async (req, res) => {
 
 // ── POST /api/orders ────────────────────────────────────────────
 app.post('/api/orders', async (req, res) => {
-  const { requestor_id, product_id, quantity, input_method, ai_classification } =
+  const { requestor_id, product_id, quantity, input_method, ai_classification, is_urgent } =
     req.body
 
   if (!requestor_id || !product_id || !quantity || !input_method) {
     return res.status(400).json({
       error: 'requestor_id, product_id, quantity, and input_method are required'
     })
+  }
+
+  const urgent =
+    is_urgent === true || is_urgent === 'true'
+      ? true
+      : is_urgent === false || is_urgent === 'false'
+        ? false
+        : null
+
+  if (urgent === null) {
+    return res.status(400).json({ error: 'is_urgent is required (true = urgent, false = batch later)' })
   }
 
   try {
@@ -256,6 +301,63 @@ app.post('/api/orders', async (req, res) => {
     if (userError) throw userError
 
     const total_price = Number(product.unit_price) * Number(quantity)
+
+    const { data: current } = await supabase
+      .from('products')
+      .select('popularity_score')
+      .eq('id', product_id)
+      .single()
+
+    await supabase
+      .from('products')
+      .update({ popularity_score: (current?.popularity_score ?? 0) + 1 })
+      .eq('id', product_id)
+
+    const hidePrices = await userHidesPrices(requestor_id)
+
+    if (!urgent) {
+      const { data: site } = await supabase
+        .from('sites')
+        .select('batch_send_time')
+        .eq('id', requestor.site_id)
+        .maybeSingle()
+
+      const order = {
+        requestor_id,
+        product_id,
+        quantity,
+        total_price,
+        site_id: requestor.site_id,
+        input_method,
+        ai_classification: ai_classification ?? null,
+        is_urgent: false,
+        status: 'queued',
+        approver_id: null
+      }
+
+      const { data: created, error: orderError } = await supabase
+        .from('orders')
+        .insert(order)
+        .select('*')
+        .single()
+
+      if (orderError) throw orderError
+      const [enriched] = await enrichOrders([created], { includePrices: !hidePrices })
+      let orderOut = enriched
+      if (hidePrices) orderOut = stripOrderPrices(orderOut)
+
+      const batchTime = normalizeBatchTime(site?.batch_send_time)
+
+      return res.status(201).json({
+        order: orderOut,
+        queued: true,
+        needs_approval: false,
+        is_urgent: false,
+        batch_send_time: batchTime,
+        po: null
+      })
+    }
+
     const needsApproval = total_price > Number(requestor.budget_limit)
 
     let approverId = requestor.manager_id ?? null
@@ -278,6 +380,7 @@ app.post('/api/orders', async (req, res) => {
       site_id: requestor.site_id,
       input_method,
       ai_classification: ai_classification ?? null,
+      is_urgent: true,
       status: needsApproval ? 'pending_approval' : 'approved',
       approver_id: needsApproval ? approverId : null
     }
@@ -289,25 +392,19 @@ app.post('/api/orders', async (req, res) => {
       .single()
 
     if (orderError) throw orderError
-    const [enriched] = await enrichOrders([created])
-
-    const { data: current } = await supabase
-      .from('products')
-      .select('popularity_score')
-      .eq('id', product_id)
-      .single()
-
-    await supabase
-      .from('products')
-      .update({ popularity_score: (current?.popularity_score ?? 0) + 1 })
-      .eq('id', product_id)
+    const [enriched] = await enrichOrders([created], { includePrices: !hidePrices })
 
     const po = needsApproval ? null : await tryAutoPo(created.id)
-    const orderOut = po?.order ? (await enrichOrders([po.order]))[0] : enriched
+    let orderOut = po?.order
+      ? (await enrichOrders([po.order], { includePrices: !hidePrices }))[0]
+      : enriched
+    if (hidePrices) orderOut = stripOrderPrices(orderOut)
 
     res.status(201).json({
       order: orderOut,
+      queued: false,
       needs_approval: needsApproval,
+      is_urgent: true,
       approver_id: needsApproval ? approverId : null,
       po
     })
@@ -336,7 +433,12 @@ app.get('/api/orders', async (req, res) => {
     const { data: orders, error } = await query
     if (error) throw error
 
-    res.json({ orders: await enrichOrders(orders ?? []) })
+    const hidePrices =
+      requestor_id && !approver_id ? await userHidesPrices(requestor_id) : false
+    let enriched = await enrichOrders(orders ?? [], { includePrices: !hidePrices })
+    if (hidePrices) enriched = enriched.map(stripOrderPrices)
+
+    res.json({ orders: enriched })
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: err.message })
@@ -600,12 +702,74 @@ app.get('/api/sites/:id', async (req, res) => {
       .map(([category, amount]) => ({ category, amount }))
       .sort((a, b) => b.amount - a.amount)
 
+    const { data: queuedOrders, error: queuedErr } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('site_id', req.params.id)
+      .eq('status', 'queued')
+      .order('created_at', { ascending: true })
+
+    if (queuedErr) throw queuedErr
+    const queued_enriched = await enrichOrders(queuedOrders ?? [])
+
     res.json({
       site,
       orders: enriched,
+      queued_orders: queued_enriched,
+      queued_count: queued_enriched.length,
       employees: users ?? [],
       category_breakdown: categoryBreakdown
     })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── PATCH /api/sites/:id ────────────────────────────────────────
+app.patch('/api/sites/:id', async (req, res) => {
+  const { delivery_address, location, name, batch_send_time } = req.body
+  const updates = {}
+  if (name !== undefined) updates.name = String(name).trim()
+  if (location !== undefined) updates.location = String(location).trim() || null
+  if (delivery_address !== undefined) {
+    updates.delivery_address = String(delivery_address).trim() || null
+  }
+  if (batch_send_time !== undefined) {
+    const t = normalizeBatchTime(batch_send_time)
+    if (!t) {
+      return res.status(400).json({ error: 'batch_send_time must be HH:MM (e.g. 17:00)' })
+    }
+    updates.batch_send_time = `${t}:00`
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({
+      error: 'No fields to update (delivery_address, location, name, or batch_send_time)'
+    })
+  }
+
+  try {
+    const { data: site, error } = await supabase
+      .from('sites')
+      .update(updates)
+      .eq('id', req.params.id)
+      .select('*')
+      .single()
+
+    if (error) throw error
+    res.json({ site })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── POST /api/sites/:id/send-batch — sourcing: flush queued orders now ─
+app.post('/api/sites/:id/send-batch', async (req, res) => {
+  try {
+    const result = await processSiteBatch(supabase, req.params.id, { force: true })
+    res.json(result)
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: err.message })
@@ -661,6 +825,7 @@ app.get('/api/dashboard', async (req, res) => {
 
     const ordersByStatus = {}
     let pendingApprovals = 0
+    let queuedOrders = 0
     const categorySpend = {}
     const siteSpend = {}
     const productStats = {}
@@ -669,6 +834,7 @@ app.get('/api/dashboard', async (req, res) => {
     for (const o of enriched) {
       ordersByStatus[o.status] = (ordersByStatus[o.status] ?? 0) + 1
       if (o.status === 'pending_approval') pendingApprovals++
+      if (o.status === 'queued') queuedOrders++
 
       if (SPENT_STATUSES.includes(o.status)) {
         const amount = Number(o.total_price)
@@ -718,6 +884,7 @@ app.get('/api/dashboard', async (req, res) => {
         total_spent: siteList.reduce((s, x) => s + Number(x.spent), 0),
         order_count: enriched.length,
         pending_approvals: pendingApprovals,
+        queued_orders: queuedOrders,
         catalog_products: products?.length ?? 0
       },
       spending_by_site: siteList.map((s) => ({
@@ -760,4 +927,6 @@ const port = process.env.PORT || 3001
 app.listen(port, '0.0.0.0', () => {
   console.log(`Backend running on http://0.0.0.0:${port}`)
   console.log('Expo Go on phone: use your Mac LAN IP, not localhost')
+  startBatchScheduler(supabase)
+  console.log('[Batch] Scheduler started (Europe/Zurich, checks every minute)')
 })

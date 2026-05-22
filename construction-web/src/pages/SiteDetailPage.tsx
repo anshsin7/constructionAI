@@ -19,12 +19,18 @@ import { api, type Employee, type Order } from '../lib/api'
 export function SiteDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [siteName, setSiteName] = useState('')
+  const [siteLocation, setSiteLocation] = useState('')
+  const [deliveryAddress, setDeliveryAddress] = useState<string | null>(null)
+  const [batchSendTime, setBatchSendTime] = useState('17:00')
+  const [queuedOrders, setQueuedOrders] = useState<Order[]>([])
   const [orders, setOrders] = useState<Order[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
   const [chartData, setChartData] = useState<{ category: string; amount: number }[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
+  const [savingBatch, setSavingBatch] = useState(false)
+  const [sendingBatch, setSendingBatch] = useState(false)
 
   function load() {
     if (!id) return
@@ -33,6 +39,11 @@ export function SiteDetailPage() {
       .getSite(id)
       .then((r) => {
         setSiteName(r.site.name)
+        setSiteLocation(r.site.location ?? '')
+        setDeliveryAddress(r.site.delivery_address ?? null)
+        const t = r.site.batch_send_time ?? '17:00:00'
+        setBatchSendTime(t.slice(0, 5))
+        setQueuedOrders(r.queued_orders ?? [])
         setOrders(r.orders)
         setEmployees(r.employees)
         setChartData(r.category_breakdown)
@@ -42,6 +53,37 @@ export function SiteDetailPage() {
   }
 
   useEffect(load, [id])
+
+  async function saveBatchTime() {
+    if (!id) return
+    setSavingBatch(true)
+    try {
+      await api.updateSite(id, { batch_send_time: batchSendTime })
+      load()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setSavingBatch(false)
+    }
+  }
+
+  async function sendBatchNow() {
+    if (!id) return
+    setSendingBatch(true)
+    try {
+      const r = await api.sendSiteBatch(id)
+      alert(
+        r.orders_sent > 0
+          ? `Sent ${r.orders_sent} order(s) in ${r.batches_sent} merged PO(s) to supplier(s).`
+          : 'No queued orders to send.'
+      )
+      load()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Batch send failed')
+    } finally {
+      setSendingBatch(false)
+    }
+  }
 
   async function saveBudget(userId: string, value: string) {
     const n = Number(value)
@@ -89,9 +131,63 @@ export function SiteDetailPage() {
         ← All sites
       </Link>
       <h2 className="mt-4 mb-2 text-2xl font-bold">{siteName}</h2>
-      <p className="mb-6 text-sm text-slate-400">
+      {siteLocation ? (
+        <p className="text-sm text-slate-400">{siteLocation}</p>
+      ) : null}
+      <p className="mb-4 text-sm text-slate-400">
         {orders.length} orders · {formatChf(totalOrderValue)} total value
       </p>
+
+      {deliveryAddress ? (
+        <p className="mb-4 text-sm text-slate-400">PO delivery: {deliveryAddress}</p>
+      ) : null}
+
+      <section className="mb-8 rounded-2xl border border-violet-900/50 bg-slate-900 p-6">
+        <h3 className="font-semibold text-violet-300">Sourcing — batch orders</h3>
+        <p className="mt-1 mb-4 text-sm text-slate-400">
+          Non-urgent mobile orders stay <span className="text-violet-300">queued</span> until this
+          time (Europe/Zurich). Same supplier → one merged PO.
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="text-sm text-slate-300">
+            Daily send time
+            <input
+              type="time"
+              value={batchSendTime}
+              onChange={(e) => setBatchSendTime(e.target.value)}
+              className="mt-1 block rounded-lg border border-slate-700 bg-slate-950 px-3 py-2"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={savingBatch}
+            onClick={saveBatchTime}
+            className="rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700 disabled:opacity-50"
+          >
+            {savingBatch ? 'Saving…' : 'Save time'}
+          </button>
+          <button
+            type="button"
+            disabled={sendingBatch || queuedOrders.length === 0}
+            onClick={sendBatchNow}
+            className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500 disabled:opacity-50"
+          >
+            {sendingBatch ? 'Sending…' : `Send batch now (${queuedOrders.length})`}
+          </button>
+        </div>
+        {queuedOrders.length > 0 ? (
+          <ul className="mt-4 space-y-2 text-sm text-slate-300">
+            {queuedOrders.map((o) => (
+              <li key={o.id} className="rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2">
+                {o.products?.name ?? 'Product'} · qty {o.quantity} ·{' '}
+                {formatChf(Number(o.total_price))}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-4 text-sm text-slate-500">No orders waiting in the batch queue.</p>
+        )}
+      </section>
 
       <div className="mb-8 grid gap-6 lg:grid-cols-2">
         <ChartPanel title="Spending by category">
